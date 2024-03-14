@@ -1,0 +1,12 @@
+2022 Outdoor 800m Men's Rankings
+
+https://tf.tfrrs.org/list_data/3596?other_lists=https%3A%2F%2Fwww.tfrrs.org%2Flists%2F3596%2F2022_NAIA_Outdoor_Qualifying_List_FINAL&limit=500&event_type=12&year=&gender=m
+https://tf.tfrrs.org/list_data/3714?other_lists=https%3A%2F%2Fwww.tfrrs.org%2Flists%2F3714%2F2022_NCAA_Division_III_Outdoor_Qualifying_FINAL&limit=500&event_type=12&year=&gender=m
+https://tf.tfrrs.org/list_data/3595?other_lists=https%3A%2F%2Fupload.tfrrs.org%2Flists%2F3595%2F2022_NCAA_Division_II_Outdoor_Qualifying_FINAL&limit=500&event_type=12&year=&gender=m
+https://tf.tfrrs.org/list_data/3711?other_lists=https%3A%2F%2Fxc.tfrrs.org%2Flists%2F3711%2F2022_NCAA_Division_I_Outdoor_Qualifying_FINAL&limit=500&event_type=12&year=&gender=m
+
+DI is sometimes different
+
+E.g. 2023 DI Outdoor
+https://tf.tfrrs.org/list_data/4044?other_lists=https%3A%2F%2Ftf.tfrrs.org%2Flists%2F4044%2F2023_NCAA_Division_I_All_Schools_Rankings&limit=500&event_type=12&year=&gender=m
+
