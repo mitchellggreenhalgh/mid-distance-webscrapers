@@ -8,7 +8,7 @@ class TFRRSScraper():
         '''Initialize a TFRRSScraper object
         
         Parameters:
-          -  second_event (int): Dictates which other event to download. Options: 400 or 1500
+          -  other_event (int): Dictates which other event to download. Options: 400 or 1500
         '''
         self.website = 'https://tfrrs.org/'
         self.other_event = other_event
