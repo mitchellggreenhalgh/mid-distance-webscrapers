@@ -1,4 +1,4 @@
-'''A module for a MileSplitScraper class that uses selenium to scrape 800m and 400m data from milesplit.com'''
+'''A module for a MileSplitScraper class that uses selenium to scrape 800m and 400m, 1600m, or mile data from MileSplit'''
 
 import pandas as pd
 from selenium.webdriver.chrome.service import Service
@@ -16,15 +16,17 @@ config = dotenv_values('.env')
 
 
 class MileSplitScraper():
-    '''A class to download 800m and 400m data from the National MileSplit database.'''
+    '''A class to download 800m and 400m or 1600m data from the National MileSplit database.'''
 
-    def __init__(self, url: str=FIRST_URL):
+    def __init__(self, other_event: str, url: str=FIRST_URL):
         '''Initialize the MileSplitScraper class
         
         Parameters:
+          -  other_event (str): Dictates which other event to download. Options: '400m', '1600m', and 'Mile'
           -  url (str): a URL to the milesplit rankings portion of the website to log in on and start scraping
         '''
 
+        self.other_event = other_event
         self.url = url
         self.website = 'https://www.milesplit.com/'
         self.USERNAME = config['USERNAME']
@@ -34,6 +36,10 @@ class MileSplitScraper():
         self.OPTIONS.add_argument('--ignore-certificate-errors')
         self.OPTIONS.add_experimental_option('excludeSwitches', ['enable-logging'])
         self.OPTIONS.add_argument("--disable-blink-features=AutomationControlled")
+
+    
+    def __repr__(self):
+        return f'Scraper object for [{self.website}]'
 
 
     def log_in(self, url: str | None=None, options: Options | None=None) -> webdriver.Chrome:
@@ -108,7 +114,7 @@ class MileSplitScraper():
           -  level (str): 'middle' for middle school or 'high' for high school
           -  sex (str): 'girls' or 'boys'
           -  season (str): 'indoor' or 'outdoor'
-          -  event (str): typically '800m', but also takes '400m'
+          -  event (str): the event of interest. Options: '800m', '400m', '1600m', 'Mile'
           -  year (str): 'yyyy', the year of the season (2000-2024)
           -  page (int): options are 1 - 20
 
@@ -140,7 +146,7 @@ class MileSplitScraper():
         
         Parameters:
           -  data (pd.DataFrame): The pd.DataFrame returned from the page source
-          -  event (str): typically '800m', but also takes '400m'
+          -  event (str): the event of interest. Options: '800m', '400m', '1600m', 'Mile'
           -  season (str): 'indoor' or 'outdoor'
           -  year (str): 'yyyy', the year of the season (2000-2024)
             
@@ -151,13 +157,17 @@ class MileSplitScraper():
         df = data
         df.columns = df.columns.str.lower()
 
-        # combine id columns
+        # Combine id columns
         df['athlete_team'] = df['athlete/team'] + ' ' + df['grade'].astype('str')
         df['athlete_team'] = df['athlete_team'].str.replace('.0', '')
 
-        # Process time column
+        # Process time column and convert 1600m and Mile to 1500m times
         if event == '800m':
             df[f'time_{event[:-1]}'] = 60 * df['time'].str[0].astype('int') + df['time'].str[2:7].astype('float')
+        elif event == '1600m':
+            df[f'time_1500'] = ((60 * df['time'].str[0].astype('int') + df['time'].str[2:7].astype('float')) * 0.9375).round(2)
+        elif event == 'Mile':
+            df[f'time_1500'] = ((60 * df['time'].str[0].astype('int') + df['time'].str[2:7].astype('float')) * 0.93205678835).round(2)
         elif event == '400m':
             df[f'time_{event[:-1]}'] = df['time'].apply(self.clean_400m_times)
 
@@ -167,7 +177,9 @@ class MileSplitScraper():
         # Add season info
         df['season'] = f'{season}_{year}'
 
-        return df[['athlete_team', f'time_{event[:-1]}', 'season']]
+        time_col = f'time_{event[:-1]}' if event in ['400m', '800m'] else 'time_1500'
+
+        return df[['athlete_team', time_col, 'season']]
         
 
     def download_single_event(self,
@@ -221,7 +233,7 @@ class MileSplitScraper():
                              sex: str, 
                              season: str, 
                              year: str) -> pd.DataFrame:
-        '''Download 800m and 400m data from Milesplit and join the tables together
+        '''Download 800m and 400m, 1600m, or mile data from Milesplit and join the tables together
         
         Parameters:
           -  driver (webdriver.Chrome): the webdriver used to log in
@@ -231,10 +243,8 @@ class MileSplitScraper():
           -  year (str): 'yyyy', the year of the season (2000-2024)
 
         Returns:
-          -  df (pd.DataFrame): a pd.DataFrame of both 800m and 400m data that belongs to a single sex for a single season
+          -  df (pd.DataFrame): a pd.DataFrame of both 800m and 400m, 1600m, or mile data that belongs to a single sex for a single season
         '''
-
-        # TODO: #5 Add 1600m functionality
 
         df_800 = self.download_single_event(driver=driver,
                                             level=level,
@@ -243,17 +253,19 @@ class MileSplitScraper():
                                             event='800m',
                                             year=year)
         
-        df_400 = self.download_single_event(driver=driver,
+        df_other = self.download_single_event(driver=driver,
                                             level=level,
                                             sex=sex,
                                             season=season,
-                                            event='400m',
+                                            event=self.other_event,
                                             year=year)
         
-        df = df_800.merge(df_400, how = 'left', left_on=['athlete_team', 'season'], right_on=['athlete_team', 'season']) \
+        df = df_800.merge(df_other, how='left', left_on=['athlete_team', 'season'], right_on=['athlete_team', 'season']) \
             .dropna()
         
-        return df[['athlete_team', 'time_800', 'time_400', 'season']]
+        col_3 = 'time_400' if self.other_event == '400m' else 'time_1500'
+
+        return df[['athlete_team', 'time_800', col_3, 'season']]
 
 
     def combine_sexes(self,
@@ -261,7 +273,7 @@ class MileSplitScraper():
                       level: str, 
                       season: str, 
                       year: str) -> pd.DataFrame:
-        '''Download 800m and 400m data from Milesplit for both sexes and combines them together
+        '''Download 800m and 400m, 1600m, or mile data from Milesplit for both sexes and combines them together
         
         Parameters:
           -  driver (webdriver.Chrome): the webdriver used to log in
@@ -270,7 +282,7 @@ class MileSplitScraper():
           -  year (str): 'yyyy', the year of the season (2000-2024)
 
         Returns:
-          -  df (pd.DataFrame): a pd.DataFrame of both 800m and 400m data that for both sexes for a single season
+          -  df (pd.DataFrame): a pd.DataFrame of both 800m and 400m, 1600m, or mile data that for both sexes for a single season
         '''
 
         df_f = self.download_both_events(driver, level, 'girls', season, year)
@@ -326,7 +338,7 @@ class MileSplitScraper():
 
 
     def download_years(self, driver: webdriver.Chrome, start: int, end: int) -> pd.DataFrame:
-        '''Download 800m and 400m data from Milesplit for both sexes in middle school and high school and combines them together for multiple years of data
+        '''Download 800m and 400m, 1600m, or mile data from Milesplit for both sexes in middle school and high school and combines them together for multiple years of data
         
         Parameters:
           -  driver (webdriver.Chrome): the webdriver used to log in
@@ -367,13 +379,11 @@ class MileSplitScraper():
         driver = self.log_in()
         df = self.download_years(driver, start, end)
         driver.close()
-        df.to_csv(f'data/milesplit_indoor_{start}-outdoor_{end}.csv', index=False)
+        df.to_csv(f'data/milesplit_indoor_{start}-outdoor_{end}_{self.other_event}.csv', index=False)
 
         return df
 
 
 if __name__ == '__main__':
-    ms = MileSplitScraper()
+    ms = MileSplitScraper(other_event='Mile')
     ms.download_and_export(2020, 2024)
-
-# TODO: #4 Make dictionary of season and available pages
