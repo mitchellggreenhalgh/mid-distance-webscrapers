@@ -136,12 +136,12 @@ class TFRRSScraper():
 
 
     def merge_tfrrs_data(self) -> pd.DataFrame:
-        '''Grabs all the TFRRS .csv files in the root directory and concatenates them together
+        '''Grabs all the TFRRS .csv files in the data directory and concatenates them together
         
         Returns:
-          -  dfs (pd.DataFrame): a single pd.DataFrame of all the TFRRS data in the root directory
+          -  dfs (pd.DataFrame): a single pd.DataFrame of all the TFRRS data in the data directory
         '''
-        data_list = glob('tfrrs*.csv')
+        data_list = glob('data/tfrrs*.csv')
 
         dfs = None
 

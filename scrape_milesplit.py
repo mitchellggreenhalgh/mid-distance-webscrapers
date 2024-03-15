@@ -367,7 +367,7 @@ class MileSplitScraper():
         driver = self.log_in()
         df = self.download_years(driver, start, end)
         driver.close()
-        df.to_csv(f'milesplit_indoor_{start}-outdoor_{end}.csv', index=False)
+        df.to_csv(f'data/milesplit_indoor_{start}-outdoor_{end}.csv', index=False)
 
         return df
 
