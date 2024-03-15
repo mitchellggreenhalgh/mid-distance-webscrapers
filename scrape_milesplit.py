@@ -152,8 +152,8 @@ class MileSplitScraper():
         df.columns = df.columns.str.lower()
 
         # combine id columns
-        df['athlete_team_grade'] = df['athlete/team'] + ' ' + df['grade'].astype('str')
-        df['athlete_team_grade'] = df['athlete_team_grade'].str.replace('.0', '')
+        df['athlete_team'] = df['athlete/team'] + ' ' + df['grade'].astype('str')
+        df['athlete_team'] = df['athlete_team'].str.replace('.0', '')
 
         # Process time column
         if event == '800m':
@@ -167,7 +167,7 @@ class MileSplitScraper():
         # Add season info
         df['season'] = f'{season}_{year}'
 
-        return df[['athlete_team_grade', f'time_{event[:-1]}', 'season']]
+        return df[['athlete_team', f'time_{event[:-1]}', 'season']]
         
 
     def download_single_event(self,
@@ -250,10 +250,10 @@ class MileSplitScraper():
                                             event='400m',
                                             year=year)
         
-        df = df_800.merge(df_400, how = 'left', left_on=['athlete_team_grade', 'season'], right_on=['athlete_team_grade', 'season']) \
+        df = df_800.merge(df_400, how = 'left', left_on=['athlete_team', 'season'], right_on=['athlete_team', 'season']) \
             .dropna()
         
-        return df[['athlete_team_grade', 'time_800', 'time_400', 'season']]
+        return df[['athlete_team', 'time_800', 'time_400', 'season']]
 
 
     def combine_sexes(self,
@@ -348,7 +348,7 @@ class MileSplitScraper():
 
             dfs = pd.concat([dfs, df])
         
-        dfs.drop_duplicates()
+        dfs = dfs.drop_duplicates()
         
         return dfs
 
