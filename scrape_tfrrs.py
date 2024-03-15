@@ -1,7 +1,5 @@
 '''A module to create a TFRRSScraper class to scrape 800m, 400m, and 1500m/Mile data from TFRRS.org'''
 
-# TODO: #2 Add 1500m Functionality
-
 import pandas as pd
 from glob import glob
 
