@@ -129,7 +129,7 @@ class MileSplitScraper():
 
 
     def clean_400m_times(self, row: str | float) -> float:
-        '''Take each row of a pd.Series and modify it according to its format
+        '''Take each row of a pd.Series of 400m data and modify it according to its format
         
         Parameters:
           -  row (str | float): Pages with everything below 1 minute comes in as a float, a page witheverything above comes as a string. If a page of results has both under 1 minute and above 1 minute on the same page, they all come as a string.
@@ -140,6 +140,20 @@ class MileSplitScraper():
         else:
             return 60 * int(str(row)[0]) + float(str(row)[2:7])
 
+
+    def clean_mile_times(self, row: str) -> float:
+        '''Take each row of a pd.Series of mile data and modify it according to its format
+        
+        Parameters:
+          -  row (str): only need to modify rows that have 10 minutes or more
+        '''
+        SCALAR = 0.93205678835 if self.other_event == 'Mile' else 0.9375
+
+        if str(row)[0] == '1':
+            return round(((60 * int(str(row)[:2]) + float(str(row)[3:8])) * SCALAR), ndigits=2)
+        else:
+            return round(((60 * int(str(row)[0]) + float(str(row)[2:7])) * SCALAR), ndigits=2)
+                  
 
     def download_and_clean(self, data: pd.DataFrame, event: str, season: str, year: str) -> pd.DataFrame:
         '''Takes the output from the page content and cleans it up
@@ -162,14 +176,23 @@ class MileSplitScraper():
         df['athlete_team'] = df['athlete_team'].str.replace('.0', '')
 
         # Process time column and convert 1600m and Mile to 1500m times
-        if event == '800m':
-            df[f'time_{event[:-1]}'] = 60 * df['time'].str[0].astype('int') + df['time'].str[2:7].astype('float')
-        elif event == '1600m':
-            df[f'time_1500'] = ((60 * df['time'].str[0].astype('int') + df['time'].str[2:7].astype('float')) * 0.9375).round(2)
-        elif event == 'Mile':
-            df[f'time_1500'] = ((60 * df['time'].str[0].astype('int') + df['time'].str[2:7].astype('float')) * 0.93205678835).round(2)
-        elif event == '400m':
-            df[f'time_{event[:-1]}'] = df['time'].apply(self.clean_400m_times)
+        try:
+            if event == '800m':
+                df[f'time_{event[:-1]}'] = 60 * df['time'].str[0].astype('int') + df['time'].str[2:7].astype('float')
+            elif event == '1600m':
+                if all(df['time'].str.len() == 7):
+                    df['time_1500'] = ((60 * df['time'].str[0].astype('int') + df['time'].str[2:7].astype('float')) * 0.9375).round(2)
+                else:
+                    df['time_1500'] = df['time'].apply(self.clean_mile_times)
+            elif event == 'Mile':
+                if all(df['time'].str.len() == 7):
+                    df['time_1500'] = ((60 * df['time'].str[0].astype('int') + df['time'].str[2:7].astype('float')) * 0.93205678835).round(2)
+                else:
+                    df['time_1500'] = df['time'].apply(self.clean_mile_times)
+            elif event == '400m':
+                df[f'time_{event[:-1]}'] = df['time'].apply(self.clean_400m_times)
+        except ValueError:
+            print(f'''ValueError in {year}'s {season} {event}''')
 
         # Drop extra columns
         df = df.drop(columns = ['rank', 'athlete/team', 'grade', 'meet  date  place', 'time'])
@@ -385,5 +408,9 @@ class MileSplitScraper():
 
 
 if __name__ == '__main__':
+    from datetime import datetime
+    start = datetime.now()
     ms = MileSplitScraper(other_event='Mile')
     ms.download_and_export(2020, 2024)
+    end = datetime.now()
+    print(start - end)
