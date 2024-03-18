@@ -45,7 +45,7 @@ class MileSplitScraper():
     def log_in(self, url: str | None=None, options: Options | None=None) -> webdriver.Chrome:
         '''Uses a Milesplit URL to log in
 
-        This could be optimized a lot I think. There are lots of 'time.sleep()' calls to prevent JS detectors from kicking the the program out, and some of them could be removed or minimized. The login isn't always successful, sometimes it just doesn't enter the keys, and I'm not sure how to automate checking if the login was successful and the program is running.
+        This could be optimized a lot I think. There are lots of 'time.sleep()' calls to prevent JS detectors from kicking the the program out, and some of them could be removed or minimized. The login isn't always successful, sometimes it just doesn't enter the keys, and I'm not sure how to automate checking if the login was successful and the program is running. Also, my computer is just very old and slow so it takes a while to load ads/go fromp page to page.
         
         Parameters:
           -  url (str): the URL to access the login
@@ -64,7 +64,7 @@ class MileSplitScraper():
         # Start Browser and Driver
         webdriver_service = Service(executable_path=r"C:\Users\mitch\Documents\Programs\chromedriver\chrome-win32-121\chromedriver-win32\chromedriver.exe")
         driver = webdriver.Chrome(service=webdriver_service, options=options)
-        driver.implicitly_wait(30)
+        driver.implicitly_wait(45)
 
         # Log in sequence
         driver.get(url)
@@ -239,7 +239,12 @@ class MileSplitScraper():
 
             # Grab and download page content
             content = driver.page_source
-            df = pd.read_html(StringIO(content))[0].pipe(self.download_and_clean, event=event, season=season, year=year)
+
+            try:
+                df = pd.read_html(StringIO(content))[0].pipe(self.download_and_clean, event=event, season=season, year=year)
+            except ValueError:
+                print(f'No Tables Found in [{url}]')
+                continue
 
             if dfs is None:
                 dfs = df
@@ -408,9 +413,9 @@ class MileSplitScraper():
 
 
 if __name__ == '__main__':
-    from datetime import datetime
-    start = datetime.now()
-    ms = MileSplitScraper(other_event='Mile')
+    from timeit import default_timer as timer
+    start = timer()
+    ms = MileSplitScraper(other_event='1600m')
     ms.download_and_export(2020, 2024)
-    end = datetime.now()
-    print(start - end)
+    end = timer()
+    print(f'{(end - start) / 60 / 60:.3f} hours')
