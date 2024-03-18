@@ -31,6 +31,7 @@ class MileSplitScraper():
         self.website = 'https://www.milesplit.com/'
         self.USERNAME = config['USERNAME']
         self.PASSWORD = config['PASSWORD']
+        self.EXE_PATH = config['EXE_PATH']
 
         self.OPTIONS = Options()
         self.OPTIONS.add_argument('--ignore-certificate-errors')
@@ -62,7 +63,7 @@ class MileSplitScraper():
             options = self.OPTIONS
 
         # Start Browser and Driver
-        webdriver_service = Service(executable_path=r"C:\Users\mitch\Documents\Programs\chromedriver\chrome-win32-121\chromedriver-win32\chromedriver.exe")
+        webdriver_service = Service(executable_path=self.EXE_PATH)
         driver = webdriver.Chrome(service=webdriver_service, options=options)
         driver.implicitly_wait(45)
 
