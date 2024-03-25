@@ -194,8 +194,8 @@ class MultivariateModel():
         
         sns.set_theme(style='whitegrid')
 
-        fig = plt.figure(figsize=(10,5))
-        sm.graphics.plot_partregress_grid(self.model, grid=(1,2), fig=fig)
+        fig = plt.figure(figsize=(10,10))
+        sm.graphics.plot_partregress_grid(self.model, grid=(2,2), fig=fig)
          
         
     def predict_time(self, times: List[str], events: List[int] | List[str] = None) -> float:
