@@ -196,6 +196,9 @@ class MultivariateModel():
 
         fig = plt.figure(figsize=(10,10))
         sm.graphics.plot_partregress_grid(self.model, grid=(2,2), fig=fig)
+
+    # TODO: #1 Add influence plots, fit plot, ccpr
+    # https://www.statsmodels.org/devel/examples/notebooks/generated/regression_plots.html#Using-robust-regression-to-correct-for-outliers.
          
         
     def predict_time(self, times: List[str], events: List[int] | List[str] = None) -> float:
