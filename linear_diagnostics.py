@@ -9,6 +9,7 @@ from statsmodels.graphics.gofplots import ProbPlot
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 import matplotlib.pyplot as plt
 from typing import Type
+import pandas as pd
 
 
 class LinearRegDiagnostic():
@@ -128,7 +129,7 @@ class LinearRegDiagnostic():
         if vif is False:
             return fig, ax
         else:
-            return self.vif_(), fig, ax
+            return self.vif_table(), fig, ax
 
     def residual_plot(self, ax=None):
         """
