@@ -106,7 +106,8 @@ class BivariateModel():
                             line_kws={'color': 'red'})
             case 'rlm':
                 plt.figure(figsize=(5, 5))
-                sns.regplot(data, x=f'time_{other_event}', y='time_800', robust=True,
+                sns.regplot(data, x=f'time_{other_event}', y='time_800', 
+                            robust=True,
                             line_kws={'color': 'red'})
                 
     
@@ -196,6 +197,51 @@ class MultivariateModel():
 
         fig = plt.figure(figsize=(10,10))
         sm.graphics.plot_partregress_grid(self.model, grid=(2,2), fig=fig)
+
+    
+    def plot_dist(self, **kwargs) -> None:
+        '''Plots the distributions of the outcome event and the predictor events.'''
+        
+        sns.set_theme(style='whitegrid')
+
+        kwargs.setdefault('color', 'lightblue')
+        kwargs.setdefault('linecolor', 'black')
+        kwargs.setdefault('width', 0.3)
+
+        # Sturge's Rule for histograms
+        BINS: int = int(np.ceil(np.log2(len(self.data)) + 1))
+
+        NROWS: int = 1 + len(self.other_events)
+        NCOLS: int = 2 
+
+
+        plt.figure(figsize = (10, 5 * NROWS))
+        plt.suptitle(f'Distributions of Outcome and Predictors')
+
+        # Outcome Distribution
+        plt.subplot(NROWS, NCOLS, 1)
+        sns.histplot(self.data[f'time_{self.outcome_event}'], 
+                     bins=BINS, 
+                     kde=True)
+
+        plt.subplot(NROWS, NCOLS, 2)
+        sns.boxplot(y=self.data[f'time_{self.outcome_event}'], 
+                    width=kwargs.get('width'),
+                    color=kwargs.get('color'), 
+                    linecolor=kwargs.get('linecolor'))
+
+        # Predictor Distributions
+        for i in range(len(self.other_events)):
+            plt.subplot(NROWS, NCOLS, i*2 + 3)
+            sns.histplot(self.data[f'time_{self.other_events[i]}'], 
+                         bins=BINS, 
+                         kde=True)
+            
+            plt.subplot(NROWS, NCOLS, i*2 + 4)
+            sns.boxplot(y=self.data[f'time_{self.other_events[i]}'], 
+                    width=kwargs.get('width'),
+                    color=kwargs.get('color'), 
+                    linecolor=kwargs.get('linecolor'))
 
     # TODO: #1 Add influence plots, fit plot, ccpr
     # https://www.statsmodels.org/devel/examples/notebooks/generated/regression_plots.html#Using-robust-regression-to-correct-for-outliers.
