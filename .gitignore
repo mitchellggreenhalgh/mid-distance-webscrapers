@@ -1,3 +1,5 @@
 .env
 *.csv
 *.txt
+test_world.ipynb
+*.html
