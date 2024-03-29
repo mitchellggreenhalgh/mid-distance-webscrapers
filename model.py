@@ -253,7 +253,7 @@ class MultivariateModel():
 
         n = quantile_data.shape[0]
         plt.figure(figsize=(11,5))  # TODO: #7 Make figsize, rest of plotting generalizable
-        plt.suptitle('Conditional Parameter Quantile Estimates')
+        plt.suptitle('Conditional Parameter Estimates across Quantiles')
 
         plt.subplot(1, 2, 1)
         p1 = plt.plot(quantile_data['q'], quantile_data[f'time_{self.other_events[0]}'], color='black', label=f'Quantile Reg {self.other_events[0]}m')
@@ -262,8 +262,9 @@ class MultivariateModel():
         p4 = plt.plot(quantile_data['q'], [ols_data['b']] * n, color='red', label=f'OLS {self.other_events[0]}m')
         p5 = plt.plot(quantile_data['q'], [ols_data['blb']] * n, linestyle='dotted', color='red')
         p6 = plt.plot(quantile_data['q'], [ols_data['bub']] * n, linestyle='dotted', color='red')
-        plt.ylabel(r'$\beta_1$')
+        plt.ylabel(fr'$\beta_{{time_{{{self.other_events[0]}}}}}$')
         plt.xlabel(f'Quantiles of the conditional {self.outcome_event}m distribution')
+        plt.title(f'{self.other_events[0]}m')
         plt.legend()
 
         plt.subplot(1, 2, 2)
@@ -273,8 +274,9 @@ class MultivariateModel():
         p10 = plt.plot(quantile_data['q'], [ols_data['c']] * n, color='red', label=f'OLS {self.other_events[1]}m')
         p11 = plt.plot(quantile_data['q'], [ols_data['clb']] * n, linestyle='dotted', color='red')
         p12 = plt.plot(quantile_data['q'], [ols_data['cub']] * n, linestyle='dotted', color='red')
-        plt.ylabel(r'$\beta_2$')
+        plt.ylabel(fr'$\beta_{{time_{{{self.other_events[1]}}}}}$')
         plt.xlabel(f'Quantiles of the conditional {self.outcome_event}m distribution')
+        plt.title(f'{self.other_events[1]}m')
         plt.legend()
 
         plt.show()
