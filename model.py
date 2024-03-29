@@ -148,19 +148,25 @@ class BivariateModel():
     
 
 class MultivariateModel():
-    '''Wrapper for `statsmodels.formula.api` with additional methods for assumption checking.'''
+    '''Wrapper for `statsmodels.formula.api` with additional methods for assumption checking, plotting distributions, and using model parameters to predict a time.'''
 
     def __init__(self, data: pd.DataFrame, model_type: str, outcome_event: int = 800, other_events: List[int] = [400, 1500]) -> None:
         '''Parameters:
           -  data (`pd.DataFrame`): a DataFrame with 800m and [other_event]m data
           -  outcome_event (int): the outcome variable in the analysis. Select one element from the following list: [400, 800, 1500]
           -  other_events (int): the other events being analyzed. Any two event combination of [400, 800, 1500] where the outcome event is removed from the list
-          -  model_type (str): the type of model to call from `statsmodels.formula.api`. Currently supports 'ols' and 'rlm'
+          -  model_type (str): the type of model to call from `statsmodels.formula.api`. Currently supports 'ols', 'rlm', 'quantreg'
         '''
         self.data = data
         self.model_type = model_type
         self.outcome_event = outcome_event
         self.other_events = other_events
+
+    def __call__(self):
+        self.plot_dist()
+        self.plot_partial_regressors()
+        self.check_assumptions(vif=False)
+        return self.model_summary
         
     @property
     def model(self):
@@ -174,20 +180,115 @@ class MultivariateModel():
                 return smf.ols(f'time_{self.outcome_event} ~ {predictor_formula}', data=self.data).fit()
             case 'rlm':
                 return smf.rlm(f'time_{self.outcome_event} ~ {predictor_formula}', data=self.data).fit() 
+            case 'quantreg':
+                model = smf.quantreg(f'time_{self.outcome_event} ~ {predictor_formula}', data=self.data)
+                # TODO: #4 Add option for different quantiles
+                quantiles = np.arange(0.05, 0.96, 0.1)
+
+                model_list = [self.fit_quantile(q=i, model=model) for i in quantiles]
+                # TODO: #3 Make columns more generalizable for more than two parameters
+                model_df = pd.DataFrame(
+                    model_list, 
+                    columns=[
+                        'q', 
+                        'intercept', 
+                        f'time_{self.other_events[0]}', 
+                        f'time_{self.other_events[1]}', 
+                        f'time_{self.other_events[0]}_lb', 
+                        f'time_{self.other_events[0]}_ub', 
+                        f'time_{self.other_events[1]}_lb', 
+                        f'time_{self.other_events[1]}_ub'
+                        ]
+                    )
+                
+                ols = smf.ols(f'time_{self.outcome_event} ~ {predictor_formula}', data=self.data).fit()
+                # TODO: #5 Make generalizable for more than 2 parameters
+                ols_ci_b = ols.conf_int().loc[f'time_{self.other_events[0]}'].tolist()
+                ols_ci_c = ols.conf_int().loc[f'time_{self.other_events[1]}'].tolist()
+                ols = dict(
+                    a=ols.params['Intercept'], 
+                    b=ols.params[f'time_{self.other_events[0]}'], 
+                    c=ols.params[f'time_{self.other_events[1]}'], 
+                    blb=ols_ci_b[0], 
+                    bub=ols_ci_b[1], 
+                    clb=ols_ci_c[0],
+                    cub=ols_ci_c[1],
+                )
+
+                return model_df, ols
 
     @property
     def model_summary(self) -> statsmodels.iolib.summary.Summary:
         '''Returns a summary of a `statsmodels.formula.api` model based on the specified `model_type` in the initializer'''
-        return self.model.summary()
+
+        if self.model_type == 'quantreg':
+            return self.model[0]
+        else:
+            return self.model.summary()
+    
+    def fit_quantile(self, q: float, model: statsmodels.regression.quantile_regression.QuantReg) -> List[List[float]]:
+        '''Fit a linear model for a given quantile.
+        
+        Parameters:
+          -  q (float): the quantile to regress on
+          -  model (statsmodels.regression.quantile_regression.QuantReg): The unfit instantiation of a Quantile Regression model'''
+        
+        results = model.fit(q=q)
+
+        # TODO: #2 Make the return statement more generalizable for more parameters
+        return [q, results.params['Intercept'], results.params[f'time_{self.other_events[0]}'], results.params[f'time_{self.other_events[1]}']] + \
+            results.conf_int().loc[f'time_{self.other_events[0]}'].tolist() + \
+            results.conf_int().loc[f'time_{self.other_events[1]}'].tolist()
     
 
-    def check_assumptions(self) -> None:
+    def plot_quantiles_by_parameter(self, quantile_data: pd.DataFrame | None = None, ols_data: dict | None = None) -> None:
+        # TODO: #6 add docstring
+        '''Docstring'''
+
+        if quantile_data is None:
+            quantile_data = self.model[0]
+
+        if ols_data is None:
+            ols_data = self.model[1]
+
+        n = quantile_data.shape[0]
+        plt.figure(figsize=(11,5))  # TODO: #7 Make figsize, rest of plotting generalizable
+        plt.suptitle('Conditional Parameter Quantile Estimates')
+
+        plt.subplot(1, 2, 1)
+        p1 = plt.plot(quantile_data['q'], quantile_data[f'time_{self.other_events[0]}'], color='black', label=f'Quantile Reg {self.other_events[0]}m')
+        p2 = plt.plot(quantile_data['q'], quantile_data[f'time_{self.other_events[0]}_ub'], linestyle='dotted', color='black')
+        p3 = plt.plot(quantile_data['q'], quantile_data[f'time_{self.other_events[0]}_lb'], linestyle='dotted', color='black')
+        p4 = plt.plot(quantile_data['q'], [ols_data['b']] * n, color='red', label=f'OLS {self.other_events[0]}m')
+        p5 = plt.plot(quantile_data['q'], [ols_data['blb']] * n, linestyle='dotted', color='red')
+        p6 = plt.plot(quantile_data['q'], [ols_data['bub']] * n, linestyle='dotted', color='red')
+        plt.ylabel(r'$\beta_1$')
+        plt.xlabel(f'Quantiles of the conditional {self.outcome_event}m distribution')
+        plt.legend()
+
+        plt.subplot(1, 2, 2)
+        p7 =  plt.plot(quantile_data['q'], quantile_data[f'time_{self.other_events[1]}'], color='blue', label=f'Quantile Reg {self.other_events[1]}m')
+        p8 =  plt.plot(quantile_data['q'], quantile_data[f'time_{self.other_events[1]}_ub'], linestyle='dotted', color='blue')
+        p9 =  plt.plot(quantile_data['q'], quantile_data[f'time_{self.other_events[1]}_lb'], linestyle='dotted', color='blue')
+        p10 = plt.plot(quantile_data['q'], [ols_data['c']] * n, color='red', label=f'OLS {self.other_events[1]}m')
+        p11 = plt.plot(quantile_data['q'], [ols_data['clb']] * n, linestyle='dotted', color='red')
+        p12 = plt.plot(quantile_data['q'], [ols_data['cub']] * n, linestyle='dotted', color='red')
+        plt.ylabel(r'$\beta_2$')
+        plt.xlabel(f'Quantiles of the conditional {self.outcome_event}m distribution')
+        plt.legend()
+
+        plt.show()
+    
+
+    def check_assumptions(self, **kwargs) -> None:
         '''Check the assumptions of linear regression. That is: linearity, normally-distributed residuals, constant variance, and the model describes all observations.'''
+
+        kwargs.setdefault('vif', True)
 
         if self.model_type == 'ols':
             model_diagnostic = LinearRegDiagnostic(self.model)
             
-            return model_diagnostic(context='seaborn-v0_8-whitegrid', high_leverage_threshold=True, vif=True)
+            return model_diagnostic(context='seaborn-v0_8-whitegrid', high_leverage_threshold=True, vif=kwargs.get('vif'))
     
 
     def plot_partial_regressors(self) -> None:
@@ -213,7 +314,6 @@ class MultivariateModel():
 
         NROWS: int = 1 + len(self.other_events)
         NCOLS: int = 2 
-
 
         plt.figure(figsize = (10, 5 * NROWS))
         plt.suptitle(f'Distributions of Outcome and Predictors')
@@ -242,6 +342,8 @@ class MultivariateModel():
                     width=kwargs.get('width'),
                     color=kwargs.get('color'), 
                     linecolor=kwargs.get('linecolor'))
+
+
 
     # TODO: #1 Add influence plots, fit plot, ccpr
     # https://www.statsmodels.org/devel/examples/notebooks/generated/regression_plots.html#Using-robust-regression-to-correct-for-outliers.
