@@ -18,12 +18,13 @@ config = dotenv_values('.env')
 class MileSplitScraper():
     '''A class to download 800m and 400m or 1600m data from the National MileSplit database.'''
 
-    def __init__(self, other_event: str, url: str=FIRST_URL):
+    def __init__(self, other_event: str, url: str=FIRST_URL, sex: str | None = None):
         '''Initialize the MileSplitScraper class
         
         Parameters:
           -  other_event (str): Dictates which other event to download. Options: '400m', '1600m', and 'Mile'
           -  url (str): a URL to the milesplit rankings portion of the website to log in on and start scraping
+          -  sex (str | None): 'm', 'f', or None. If 'm' or 'f' is indicated, only that sex will be downloaded
         '''
 
         self.other_event = other_event
@@ -32,6 +33,7 @@ class MileSplitScraper():
         self.USERNAME = config['USERNAME']
         self.PASSWORD = config['PASSWORD']
         self.EXE_PATH = config['EXE_PATH']
+        self.sex = sex
 
         self.OPTIONS = Options()
         self.OPTIONS.add_argument('--ignore-certificate-errors')
@@ -314,8 +316,13 @@ class MileSplitScraper():
           -  df (pd.DataFrame): a pd.DataFrame of both 800m and 400m, 1600m, or mile data that for both sexes for a single season
         '''
 
-        df_f = self.download_both_events(driver, level, 'girls', season, year)
-        df_m = self.download_both_events(driver, level, 'boys', season, year)
+        df_f = self.download_both_events(driver, level, 'girls', season, year).assign(sex='f')
+        if self.sex == 'f':
+          return df_f
+
+        df_m = self.download_both_events(driver, level, 'boys', season, year).assign(sex='m')
+        if self.sex == 'm':
+          return df_m
 
         df = pd.concat([df_f, df_m])
 
@@ -408,7 +415,13 @@ class MileSplitScraper():
         driver = self.log_in()
         df = self.download_years(driver, start, end)
         driver.close()
-        df.to_csv(f'data/milesplit_indoor_{start}-outdoor_{end}_{self.other_event}.csv', index=False)
+
+        if self.sex is None:
+          sex = ''
+        else:
+          sex = f'_{self.sex}'        
+
+        df.to_csv(f'data/milesplit_indoor_{start}-outdoor_{end}_{self.other_event}{sex}.csv', index=False)
 
         return df
 
