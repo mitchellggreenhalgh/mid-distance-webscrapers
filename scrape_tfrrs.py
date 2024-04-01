@@ -153,7 +153,7 @@ class TFRRSScraper():
             dfs = pd.concat([dfs, df])
 
         # Export
-        dfs.to_csv(f'data/tfrrs_{division}_{list(seasons.keys())[0]}-{list(seasons.keys())[-1]}_{self.other_event}_{datetime.now(): %Y_%m_%d}.csv', index=False)
+        dfs.to_csv(f'data/tfrrs_{division}_{list(seasons.keys())[0]}-{list(seasons.keys())[-1]}_{self.other_event}_{datetime.now():%Y-%m-%d}.csv', index=False)
 
         return dfs
 
@@ -164,7 +164,7 @@ class TFRRSScraper():
         Returns:
           -  dfs (pd.DataFrame): a single pd.DataFrame of all the TFRRS data in the data directory
         '''
-        data_list = glob(f'data/tfrrs*{self.other_event}.csv')
+        data_list = glob(f'data/tfrrs*{self.other_event}*.csv')
 
         dfs = None
 
