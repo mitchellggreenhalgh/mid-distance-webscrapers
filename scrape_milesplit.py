@@ -8,6 +8,7 @@ from selenium import webdriver
 import time
 from dotenv import dotenv_values
 from io import StringIO
+from datetime import datetime
 
 
 FIRST_URL = 'https://www.milesplit.com/rankings/events/high-school-girls/indoor-track-and-field/800m?year=2024&accuracy=fat&grade=all&ageGroup=&league=0&meet=0&team=0&venue=0&conversion=n&page=1'
@@ -316,13 +317,16 @@ class MileSplitScraper():
           -  df (pd.DataFrame): a pd.DataFrame of both 800m and 400m, 1600m, or mile data that for both sexes for a single season
         '''
 
-        df_f = self.download_both_events(driver, level, 'girls', season, year).assign(sex='f')
         if self.sex == 'f':
+          df_f = self.download_both_events(driver, level, 'girls', season, year).assign(sex='f')
           return df_f
 
-        df_m = self.download_both_events(driver, level, 'boys', season, year).assign(sex='m')
         if self.sex == 'm':
+          df_m = self.download_both_events(driver, level, 'boys', season, year).assign(sex='m')
           return df_m
+
+        df_f = self.download_both_events(driver, level, 'girls', season, year).assign(sex='f')
+        df_m = self.download_both_events(driver, level, 'boys', season, year).assign(sex='m')
 
         df = pd.concat([df_f, df_m])
 
@@ -421,7 +425,7 @@ class MileSplitScraper():
         else:
           sex = f'_{self.sex}'        
 
-        df.to_csv(f'data/milesplit_indoor_{start}-outdoor_{end}_{self.other_event}{sex}.csv', index=False)
+        df.to_csv(f'data/milesplit_indoor_{start}-outdoor_{end}_{self.other_event}{sex}_{datetime.now(): %Y_%m_%d}.csv', index=False)
 
         return df
 
