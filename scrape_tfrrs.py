@@ -2,16 +2,19 @@
 
 import pandas as pd
 from glob import glob
+from datetime import datetime
 
 class TFRRSScraper():
-    def __init__(self, other_event: int):
+    def __init__(self, other_event: int, sex: str | None = None):
         '''Initialize a TFRRSScraper object
         
         Parameters:
           -  other_event (int): Dictates which other event to download. Options: 400 or 1500
+          -  sex (str | None): 'f', 'm', or None. If 'f' or 'm', download only that sex's data
         '''
         self.website = 'https://tfrrs.org/'
         self.other_event = other_event
+        self.sex = sex
 
 
     def __repr__(self):
@@ -84,8 +87,8 @@ class TFRRSScraper():
           -  df_all (pd.DataFrame): a pd.DataFrame that merges the 400m or 1500m/800 data for both sexes into one table.
         '''
         
-        df_women = self.extract_event_data(url_root_other=url_root_other, url_root_800=url_root_800, sex='f')
-        df_men = self.extract_event_data(url_root_other=url_root_other, url_root_800=url_root_800, sex='m')
+        df_women = self.extract_event_data(url_root_other=url_root_other, url_root_800=url_root_800, sex='f').assign(sex='f')
+        df_men = self.extract_event_data(url_root_other=url_root_other, url_root_800=url_root_800, sex='m').assign(sex='m')
 
         df_all = pd.concat([df_women, df_men])
 
@@ -150,7 +153,7 @@ class TFRRSScraper():
             dfs = pd.concat([dfs, df])
 
         # Export
-        dfs.to_csv(f'data/tfrrs_{division}_{list(seasons.keys())[0]}-{list(seasons.keys())[-1]}_{self.other_event}.csv', index=False)
+        dfs.to_csv(f'data/tfrrs_{division}_{list(seasons.keys())[0]}-{list(seasons.keys())[-1]}_{self.other_event}_{datetime.now(): %Y_%m_%d}.csv', index=False)
 
         return dfs
 
