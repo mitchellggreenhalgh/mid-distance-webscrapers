@@ -1,5 +1,5 @@
 # mid-distance-webscrapers
- A pair of modules to scrape mid-distance data from TFRRS and MileSplit
+ A pair of modules to scrape mid-distance data from TFRRS and MileSplit. Can be adapted for other events.
 
 
 # Required software
