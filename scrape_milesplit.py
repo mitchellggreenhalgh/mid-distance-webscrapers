@@ -425,9 +425,9 @@ class MileSplitScraper():
         else:
           sex = f'_{self.sex}'        
 
-        df.to_csv(f'data/milesplit_indoor_{start}-outdoor_{end}_{self.other_event}{sex}_{datetime.now():%Y-%m-%d}.csv', index=False)
+        df.drop_duplicates().to_csv(f'data/milesplit_indoor_{start}-outdoor_{end}_{self.other_event}{sex}_{datetime.now():%Y-%m-%d}.csv', index=False)
 
-        return df
+        return df.drop_duplicates()
 
 
 if __name__ == '__main__':
