@@ -46,7 +46,7 @@ class MileSplitScraper():
         return f'Scraper object for [{self.website}]'
 
 
-    def log_in(self, url: str | None=None, options: Options | None=None) -> webdriver.Chrome:
+    def log_in(self, url: str | None = None, options: Options | None = None) -> webdriver.Chrome:
         '''Uses a Milesplit URL to log in
 
         This could be optimized a lot I think. There are lots of 'time.sleep()' calls to prevent JS detectors from kicking the the program out, and some of them could be removed or minimized. The login isn't always successful, sometimes it just doesn't enter the keys, and I'm not sure how to automate checking if the login was successful and the program is running. Also, my computer is just very old and slow so it takes a while to load ads/go fromp page to page.
@@ -425,7 +425,7 @@ class MileSplitScraper():
         else:
           sex = f'_{self.sex}'        
 
-        df.to_csv(f'data/milesplit_indoor_{start}-outdoor_{end}_{self.other_event}{sex}_{datetime.now(): %Y_%m_%d}.csv', index=False)
+        df.to_csv(f'data/milesplit_indoor_{start}-outdoor_{end}_{self.other_event}{sex}_{datetime.now():%Y-%m-%d}.csv', index=False)
 
         return df
 
@@ -433,7 +433,7 @@ class MileSplitScraper():
 if __name__ == '__main__':
     from timeit import default_timer as timer
     start = timer()
-    ms = MileSplitScraper(other_event='1600m')
+    ms = MileSplitScraper(other_event='400m')
     ms.download_and_export(2020, 2024)
     end = timer()
     print(f'{(end - start) / 60 / 60:.3f} hours')

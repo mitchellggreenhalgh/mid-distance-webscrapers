@@ -243,6 +243,8 @@ class MultivariateModel():
 
     def plot_quantiles_by_parameter(self, quantile_data: pd.DataFrame | None = None, ols_data: dict | None = None) -> None:
         # TODO: #6 add docstring
+        # https://www.statsmodels.org/dev/examples/notebooks/generated/quantile_regression.html#Second-plot
+        # https://www.statsmodels.org/dev/generated/statsmodels.formula.api.quantreg.html#
         '''Docstring'''
 
         if quantile_data is None:
