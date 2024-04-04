@@ -35,9 +35,9 @@ class BivariateModel():
         
     @property
     def model(self):
-        '''Returns a fitted `statsmodels.api` model based on the specified `model_type` in the initializer. Compatible with other `statsmodels.formula.api` attributes and methods.'''
+        '''Returns a fitted `statsmodels.api` model based on the specified `model_type` in the initializer. Compatible with other `statsmodels.api` attributes and methods.'''
 
-        assert self.model_type in smf.__all__ + ['quad'], 'Choose a valid `statsmodels.formula.api` model'
+        assert self.model_type in smf.__all__ + ['quad'], 'Choose a valid `statsmodels.api` model'
 
         y = self.data[f'time_{self.outcome_event}']
         X = self.data[[f'time_{self.predictor_event}']]
