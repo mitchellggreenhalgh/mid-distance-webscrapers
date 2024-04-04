@@ -9,120 +9,231 @@ import numpy as np
 from scipy import stats
 from typing import List, Dict
 from linear_diagnostics import LinearRegDiagnostic
+from sklearn.preprocessing import PolynomialFeatures
+from statsmodels.tools.tools import add_constant
 
 class BivariateModel():
-    '''Wrapper for `statsmodels.formula.api` with additional methods for assumption checking.'''
+    '''Wrapper for `statsmodels.api` with additional methods for assumption checking.'''
 
-    def __init__(self, data: pd.DataFrame, other_event: int, model_type: str) -> None:
+    def __init__(self, 
+                 data: pd.DataFrame,
+                 *, 
+                 outcome_event: int, 
+                 predictor_event: int, 
+                 model_type: str) -> None:
         '''Parameters:
-          -  data (`pd.DataFrame`): a DataFrame with 800m and [other_event]m data
-          -  other_event (int): the other event being analyzed. Options: 400 or 1500
-          -  model_type (str): the type of model to call from `statsmodels.formula.api`. Currently supports 'ols' and 'rlm'
+          -  data (`pd.DataFrame`): a DataFrame with outcome and predictor data
+          -  outcome_event (`int`): the outcome event to be analyzed. Options: 400, 800, or 1500
+          -  predictor_event (`int`): the predictor event being analyzed. Options: 400, 800, or 1500, exclusive of the outcome event
+          -  model_type (`str`): the type of model to call from `statsmodels.formula.api`. Currently supports 'ols', 'quad', 'rlm', and 'quantreg'
         '''
+
         self.data = data
-        self.other_event = other_event
+        self.outcome_event = outcome_event
+        self.predictor_event = predictor_event
         self.model_type = model_type
         
     @property
     def model(self):
-        '''Returns a fitted `statsmodels.formula.api` model based on the specified `model_type` in the initializer. Compatible with other `statsmodels.formula.api` attributes and methods'''
-        assert self.model_type in smf.__all__, 'Choose a valid `statsmodels.formula.api` model'
+        '''Returns a fitted `statsmodels.api` model based on the specified `model_type` in the initializer. Compatible with other `statsmodels.formula.api` attributes and methods.'''
+
+        assert self.model_type in smf.__all__ + ['quad'], 'Choose a valid `statsmodels.formula.api` model'
+
+        y = self.data[f'time_{self.outcome_event}']
+        X = self.data[[f'time_{self.predictor_event}']]
 
         match self.model_type:
             case 'ols':
-                return smf.ols(f'time_800 ~ time_{self.other_event}', data=self.data).fit()
+                return sm.OLS(y, add_constant(X)).fit()
+            case 'quad':
+                X_quad = PolynomialFeatures(degree=2).fit_transform(X)
+                return sm.OLS(y, X_quad).fit()            
             case 'rlm':
-                return smf.rlm(f'time_800 ~ time_{self.other_event}', data=self.data).fit() 
+                return sm.RLM(y, add_constant(X)).fit()
+            case 'quantreg':
+                model = smf.quantreg(f'time_{self.outcome_event} ~ time_{self.predictor_event}', data=self.data)
+                quantiles = np.arange(0.05, 0.96, 0.1)
+
+                model_list = [self.fit_quantile(q=i, model=model) for i in quantiles]
+                model_df = pd.DataFrame(
+                    model_list, 
+                    columns=[
+                        'q', 
+                        'intercept', 
+                        f'time_{self.predictor_event}', 
+                        f'time_{self.predictor_event}_lb', 
+                        f'time_{self.predictor_event}_ub'
+                        ]
+                    )
+                
+                ols = smf.ols(f'time_{self.outcome_event} ~ time_{self.predictor_event}', data=self.data).fit()
+                ols_ci_b = ols.conf_int().loc[f'time_{self.predictor_event}'].tolist()
+                ols = dict(
+                    a=ols.params['Intercept'], 
+                    b=ols.params[f'time_{self.predictor_event}'], 
+                    blb=ols_ci_b[0], 
+                    bub=ols_ci_b[1], 
+                )
+
+                return model_df, ols
+            
 
     @property
     def model_summary(self) -> statsmodels.iolib.summary.Summary:
         '''Returns a summary of a `statsmodels.formula.api` model based on the specified `model_type` in the initializer'''
-        return self.model.summary()
+        if self.model_type == 'quantreg':
+            return self.model[0]
+        else:
+            return self.model.summary()
     
 
     def check_assumptions(self) -> None:
         '''Check the assumptions of linear regression. That is: linearity, normally-distributed residuals, constant variance, and the model describes all observations.'''
 
-        if self.model_type == 'ols':
+        if self.model_type in ['ols', 'quad']:
             model_diagnostic = LinearRegDiagnostic(self.model)
             model_diagnostic(context='seaborn-v0_8-whitegrid', high_leverage_threshold=True)
     
 
-    def plot_dist(self, data: pd.DataFrame | None = None, other_event: int | None = None) -> None:
+    def plot_dist(self, 
+                  data: pd.DataFrame | None = None, 
+                  outcome_event: int | None = None, 
+                  predictor_event: int | None = None) -> None:
         '''Plot a histogram with overlying KDE for 400m and 800m times in a pd.DataFrame.
         
         Parameters:
-          -  data (`pd.DataFrame`): a pd.DataFrame with 800m and 'other_event' times
-          -  other_event (int): the event besides the 800m that's in the dataset'''
+          -  data (`pd.DataFrame`): a pd.DataFrame with 800m and 'predictor_event' times
+          -  outcome_event (`int` | `None`): the outcome event being modelled
+          -  predictor_event (`int` | `None`): the predictor event in the dataset
+        '''
         
         sns.set_theme(style='whitegrid')
 
         if data is None:
             data = self.data
 
-        if other_event is None:
-            other_event = self.other_event
+        if predictor_event is None:
+            predictor_event = self.predictor_event
+
+        if outcome_event is None:
+            outcome_event = self.outcome_event
 
         # Sturge's Rule
         BINS = int(np.ceil(np.log2(len(data)) + 1))
 
         plt.figure(figsize = (15, 5))
-        plt.suptitle(f'{other_event}m vs 800m\nn={len(data):,}')
+        plt.suptitle(f'{predictor_event}m vs {outcome_event}m\nn={len(data):,}')
 
         plt.subplot(1, 3, 1)
-        plt.scatter(x=data[f'time_{other_event}'], y=data['time_800'], alpha=0.5)
-        plt.xlabel(f'{other_event}m')
-        plt.ylabel('800m')
+        plt.scatter(x=data[f'time_{predictor_event}'], y=data[f'time_{outcome_event}'], alpha=0.5)
+        plt.xlabel(f'{predictor_event}m')
+        plt.ylabel(f'{outcome_event}m')
 
         plt.subplot(1, 3, 2)
-        sns.histplot(data['time_800'], bins=BINS, kde=True)
+        sns.histplot(data[f'time_{outcome_event}'], bins=BINS, kde=True)
 
         plt.subplot(1, 3, 3)
-        sns.histplot(data[f'time_{other_event}'], bins=BINS, kde=True)  
+        sns.histplot(data[f'time_{predictor_event}'], bins=BINS, kde=True)  
 
 
-    def plot_conf_int(self, data: pd.DataFrame | None = None, other_event: int | None = None) -> None:
-        '''Plot a regression plot with 95% Confidence Intervals for an ols model
+    def plot_conf_int(self, 
+                      data: pd.DataFrame | None = None, 
+                      outcome_event: int | None = None, 
+                      predictor_event: int | None = None) -> None:
+        '''Plot a regression plot with 95% Confidence Intervals for a model
         
         Parameters:
-          -  data (`pd.DataFrame`): a pd.DataFrame with 800m and 'other_event' times
-          -  other_event (int): the event besides the 800m that's in the dataset'''
-        
-        if self.model_type not in ['ols', 'rlm']:
-            raise ValueError('This function can only be run on OLS models')
+          -  data (`pd.DataFrame`): a pd.DataFrame with [outcome_event]m and [predictor_event]m times
+          -  outcome_event (`int` | `None`): the outcome event being modelled
+          -  predictor_event (`int` | `None`): the predictor event in the dataset
+        '''
         
         sns.set_theme(style='whitegrid')
 
         if data is None:
             data = self.data
 
-        if other_event is None:
-            other_event = self.other_event
+        if outcome_event is None:
+            outcome_event = self.outcome_event
+
+        if predictor_event is None:
+            predictor_event = self.predictor_event
 
         match self.model_type:
             case 'ols':
                 plt.figure(figsize=(5, 5))
-                sns.regplot(data, x=f'time_{other_event}', y='time_800',
-                            line_kws={'color': 'red'})
+                sns.regplot(data, x=f'time_{predictor_event}', y=f'time_{outcome_event}',
+                            line_kws={'color': 'red'},
+                            scatter_kws={'alpha': 0.3})
+            case 'quad':
+                plt.figure(figsize=(5, 5))
+                sns.regplot(data, x=f'time_{predictor_event}', y=f'time_{outcome_event}',
+                            line_kws={'color': 'red'},
+                            scatter_kws={'alpha': 0.3},
+                            order=2)
             case 'rlm':
                 plt.figure(figsize=(5, 5))
-                sns.regplot(data, x=f'time_{other_event}', y='time_800', 
+                sns.regplot(data, x=f'time_{predictor_event}', y=f'time_{outcome_event}', 
                             robust=True,
-                            line_kws={'color': 'red'})
-                
+                            line_kws={'color': 'red'},
+                            scatter_kws={'alpha': 0.3})
+                            
     
-    def predict_time(self,  time: str, event: int | str | None = None) -> float:
+    def fit_quantile(self, q: float, model: statsmodels.regression.quantile_regression.QuantReg) -> List[List[float]]:
+        '''Fit a linear model for a given quantile.
+        
+        Parameters:
+          -  q (float): the quantile to regress on
+          -  model (statsmodels.regression.quantile_regression.QuantReg): The unfit instantiation of a Quantile Regression model
+        '''
+        
+        results = model.fit(q=q)
+
+        return [q, results.params['Intercept'], results.params[f'time_{self.predictor_event}']] + \
+            results.conf_int().loc[f'time_{self.predictor_event}'].tolist()
+    
+
+    def plot_quantiles_by_parameter(self, quantile_data: pd.DataFrame | None = None, ols_data: dict | None = None) -> None:
+        '''Docstring'''
+
+        sns.set_theme(style='whitegrid')
+
+        if quantile_data is None:
+            quantile_data = self.model[0]
+
+        if ols_data is None:
+            ols_data = self.model[1]
+
+        n = quantile_data.shape[0]
+        plt.figure(figsize=(5,5))  
+        plt.title(f'Conditional Parameter Estimates across {self.outcome_event}m Quantiles')
+
+        p1 = plt.plot(quantile_data['q'], quantile_data[f'time_{self.predictor_event}'], color='black', label=f'Quantile Reg {self.predictor_event}m')
+        p2 = plt.plot(quantile_data['q'], quantile_data[f'time_{self.predictor_event}_ub'], linestyle='dotted', color='black')
+        p3 = plt.plot(quantile_data['q'], quantile_data[f'time_{self.predictor_event}_lb'], linestyle='dotted', color='black')
+        p4 = plt.plot(quantile_data['q'], [ols_data['b']] * n, color='red', label=f'OLS {self.predictor_event}m')
+        p5 = plt.plot(quantile_data['q'], [ols_data['blb']] * n, linestyle='dotted', color='red')
+        p6 = plt.plot(quantile_data['q'], [ols_data['bub']] * n, linestyle='dotted', color='red')
+        plt.ylabel(fr'$\beta_{{time_{{{self.predictor_event}}}}}$')
+        plt.xlabel(f'Quantiles of the conditional {self.outcome_event}m distribution')
+        plt.legend()
+    
+
+    def predict_time(self,  
+                     time: str, 
+                     event: int | str | None = None) -> float:
         '''Use the model's parameters to predict the average 800m time for a runner who runs a certain event in a certain time. No protection against extrapolation
         
         Parameters:
-          -  event (int | str): possible events to predict 800m time from. Options: '400', '1600', 'mile'
-          -  time (str): time elapsed in the specified event. Format: 'm:ss.xx' 
+          -  event (`int` | `str`): possible events to predict 800m time from. Options: '400', '1600', 'mile'
+          -  time (`str`): time elapsed in the specified event. Format: 'm:ss.xx' 
         
         Returns:
-          -  estimate (float): the estimated time according to the parameters'''
+          -  estimate (`float`): the estimated time according to the parameters
+        '''
         
         if event is None:
-            event = self.other_event
+            event = self.predictor_event
 
         # Grab coefficients
         beta_0 = self.model.params['Intercept']
@@ -150,17 +261,23 @@ class BivariateModel():
 class MultivariateModel():
     '''Wrapper for `statsmodels.formula.api` with additional methods for assumption checking, plotting distributions, and using model parameters to predict a time.'''
 
-    def __init__(self, data: pd.DataFrame, model_type: str, outcome_event: int = 800, other_events: List[int] = [400, 1500]) -> None:
+    def __init__(self, 
+                 data: pd.DataFrame, 
+                 *,
+                 outcome_event: int, 
+                 predictor_events: List[int],
+                 model_type: str) -> None:
         '''Parameters:
-          -  data (`pd.DataFrame`): a DataFrame with 800m and [other_event]m data
-          -  outcome_event (int): the outcome variable in the analysis. Select one element from the following list: [400, 800, 1500]
-          -  other_events (int): the other events being analyzed. Any two event combination of [400, 800, 1500] where the outcome event is removed from the list
-          -  model_type (str): the type of model to call from `statsmodels.formula.api`. Currently supports 'ols', 'rlm', 'quantreg'
+          -  data (`pd.DataFrame`): a DataFrame with [outcome_event]m and [predictor_events]m data
+          -  outcome_event (`int`): the outcome variable in the analysis. Select one element from the following list: [400, 800, 1500]
+          -  predictor_events (`int`): the predictor events being analyzed. Any two event combination of [400, 800, 1500] exclusive of the outcome event
+          -  model_type (`str`): the type of model to call from `statsmodels.formula.api`. Currently supports 'ols', 'rlm', 'quad', 'quantreg'
         '''
         self.data = data
         self.model_type = model_type
         self.outcome_event = outcome_event
-        self.other_events = other_events
+        self.predictor_events = predictor_events
+
 
     def __call__(self):
         self.plot_dist()
@@ -168,18 +285,23 @@ class MultivariateModel():
         self.check_assumptions(vif=False)
         return self.model_summary
         
+
     @property
     def model(self):
         '''Returns a fitted `statsmodels.formula.api` model based on the specified `model_type` in the initializer. Compatible with other `statsmodels.formula.api` attributes and methods. Currrently only includes OLS and RLM without interactions.'''
-        assert self.model_type in smf.__all__, 'Choose a valid `statsmodels.formula.api` model'
 
-        predictor_formula = ' + '.join(['time_' + str(event) for event in self.other_events])
+        # TODO: #10 Convert from formula to regular, it should be easier to generalize that way
+        assert self.model_type in smf.__all__ + ['quad'], 'Choose a valid `statsmodels.formula.api` model'
+
+        predictor_formula = ' + '.join(['time_' + str(event) for event in self.predictor_events])
 
         match self.model_type:
             case 'ols':
                 return smf.ols(f'time_{self.outcome_event} ~ {predictor_formula}', data=self.data).fit()
+
             case 'rlm':
                 return smf.rlm(f'time_{self.outcome_event} ~ {predictor_formula}', data=self.data).fit() 
+
             case 'quantreg':
                 model = smf.quantreg(f'time_{self.outcome_event} ~ {predictor_formula}', data=self.data)
                 # TODO: #4 Add option for different quantiles
@@ -192,23 +314,23 @@ class MultivariateModel():
                     columns=[
                         'q', 
                         'intercept', 
-                        f'time_{self.other_events[0]}', 
-                        f'time_{self.other_events[1]}', 
-                        f'time_{self.other_events[0]}_lb', 
-                        f'time_{self.other_events[0]}_ub', 
-                        f'time_{self.other_events[1]}_lb', 
-                        f'time_{self.other_events[1]}_ub'
+                        f'time_{self.predictor_events[0]}', 
+                        f'time_{self.predictor_events[1]}', 
+                        f'time_{self.predictor_events[0]}_lb', 
+                        f'time_{self.predictor_events[0]}_ub', 
+                        f'time_{self.predictor_events[1]}_lb', 
+                        f'time_{self.predictor_events[1]}_ub'
                         ]
                     )
                 
                 ols = smf.ols(f'time_{self.outcome_event} ~ {predictor_formula}', data=self.data).fit()
                 # TODO: #5 Make generalizable for more than 2 parameters
-                ols_ci_b = ols.conf_int().loc[f'time_{self.other_events[0]}'].tolist()
-                ols_ci_c = ols.conf_int().loc[f'time_{self.other_events[1]}'].tolist()
+                ols_ci_b = ols.conf_int().loc[f'time_{self.predictor_events[0]}'].tolist()
+                ols_ci_c = ols.conf_int().loc[f'time_{self.predictor_events[1]}'].tolist()
                 ols = dict(
                     a=ols.params['Intercept'], 
-                    b=ols.params[f'time_{self.other_events[0]}'], 
-                    c=ols.params[f'time_{self.other_events[1]}'], 
+                    b=ols.params[f'time_{self.predictor_events[0]}'], 
+                    c=ols.params[f'time_{self.predictor_events[1]}'], 
                     blb=ols_ci_b[0], 
                     bub=ols_ci_b[1], 
                     clb=ols_ci_c[0],
@@ -216,6 +338,16 @@ class MultivariateModel():
                 )
 
                 return model_df, ols
+                
+            case 'quad':
+                y = self.data[f'time_{self.outcome_event}']
+                X = self.data[[f'time_{i}' for i in self.predictor_events]]
+
+                X_poly = PolynomialFeatures(degree=2).fit_transform(X)
+                X_poly = add_constant(X_poly)
+
+                return sm.OLS(endog=y, exog=X_poly).fit()
+
 
     @property
     def model_summary(self) -> statsmodels.iolib.summary.Summary:
@@ -226,70 +358,13 @@ class MultivariateModel():
         else:
             return self.model.summary()
     
-    def fit_quantile(self, q: float, model: statsmodels.regression.quantile_regression.QuantReg) -> List[List[float]]:
-        '''Fit a linear model for a given quantile.
-        
-        Parameters:
-          -  q (float): the quantile to regress on
-          -  model (statsmodels.regression.quantile_regression.QuantReg): The unfit instantiation of a Quantile Regression model'''
-        
-        results = model.fit(q=q)
-
-        # TODO: #2 Make the return statement more generalizable for more parameters
-        return [q, results.params['Intercept'], results.params[f'time_{self.other_events[0]}'], results.params[f'time_{self.other_events[1]}']] + \
-            results.conf_int().loc[f'time_{self.other_events[0]}'].tolist() + \
-            results.conf_int().loc[f'time_{self.other_events[1]}'].tolist()
-    
-
-    def plot_quantiles_by_parameter(self, quantile_data: pd.DataFrame | None = None, ols_data: dict | None = None) -> None:
-        # TODO: #6 add docstring
-        # https://www.statsmodels.org/dev/examples/notebooks/generated/quantile_regression.html#Second-plot
-        # https://www.statsmodels.org/dev/generated/statsmodels.formula.api.quantreg.html#
-        '''Docstring'''
-
-        if quantile_data is None:
-            quantile_data = self.model[0]
-
-        if ols_data is None:
-            ols_data = self.model[1]
-
-        n = quantile_data.shape[0]
-        plt.figure(figsize=(11,5))  # TODO: #7 Make figsize, rest of plotting generalizable
-        plt.suptitle('Conditional Parameter Estimates across Quantiles')
-
-        plt.subplot(1, 2, 1)
-        p1 = plt.plot(quantile_data['q'], quantile_data[f'time_{self.other_events[0]}'], color='black', label=f'Quantile Reg {self.other_events[0]}m')
-        p2 = plt.plot(quantile_data['q'], quantile_data[f'time_{self.other_events[0]}_ub'], linestyle='dotted', color='black')
-        p3 = plt.plot(quantile_data['q'], quantile_data[f'time_{self.other_events[0]}_lb'], linestyle='dotted', color='black')
-        p4 = plt.plot(quantile_data['q'], [ols_data['b']] * n, color='red', label=f'OLS {self.other_events[0]}m')
-        p5 = plt.plot(quantile_data['q'], [ols_data['blb']] * n, linestyle='dotted', color='red')
-        p6 = plt.plot(quantile_data['q'], [ols_data['bub']] * n, linestyle='dotted', color='red')
-        plt.ylabel(fr'$\beta_{{time_{{{self.other_events[0]}}}}}$')
-        plt.xlabel(f'Quantiles of the conditional {self.outcome_event}m distribution')
-        plt.title(f'{self.other_events[0]}m')
-        plt.legend()
-
-        plt.subplot(1, 2, 2)
-        p7 =  plt.plot(quantile_data['q'], quantile_data[f'time_{self.other_events[1]}'], color='blue', label=f'Quantile Reg {self.other_events[1]}m')
-        p8 =  plt.plot(quantile_data['q'], quantile_data[f'time_{self.other_events[1]}_ub'], linestyle='dotted', color='blue')
-        p9 =  plt.plot(quantile_data['q'], quantile_data[f'time_{self.other_events[1]}_lb'], linestyle='dotted', color='blue')
-        p10 = plt.plot(quantile_data['q'], [ols_data['c']] * n, color='red', label=f'OLS {self.other_events[1]}m')
-        p11 = plt.plot(quantile_data['q'], [ols_data['clb']] * n, linestyle='dotted', color='red')
-        p12 = plt.plot(quantile_data['q'], [ols_data['cub']] * n, linestyle='dotted', color='red')
-        plt.ylabel(fr'$\beta_{{time_{{{self.other_events[1]}}}}}$')
-        plt.xlabel(f'Quantiles of the conditional {self.outcome_event}m distribution')
-        plt.title(f'{self.other_events[1]}m')
-        plt.legend()
-
-        plt.show()
-    
 
     def check_assumptions(self, **kwargs) -> None:
         '''Check the assumptions of linear regression. That is: linearity, normally-distributed residuals, constant variance, and the model describes all observations.'''
 
         kwargs.setdefault('vif', True)
 
-        if self.model_type == 'ols':
+        if self.model_type in ['ols', 'quad']:
             model_diagnostic = LinearRegDiagnostic(self.model)
             
             return model_diagnostic(context='seaborn-v0_8-whitegrid', high_leverage_threshold=True, vif=kwargs.get('vif'))
@@ -316,7 +391,7 @@ class MultivariateModel():
         # Sturge's Rule for histograms
         BINS: int = int(np.ceil(np.log2(len(self.data)) + 1))
 
-        NROWS: int = 1 + len(self.other_events)
+        NROWS: int = 1 + len(self.predictor_events)
         NCOLS: int = 2 
 
         plt.figure(figsize = (10, 5 * NROWS))
@@ -335,25 +410,84 @@ class MultivariateModel():
                     linecolor=kwargs.get('linecolor'))
 
         # Predictor Distributions
-        for i in range(len(self.other_events)):
+        for i in range(len(self.predictor_events)):
             plt.subplot(NROWS, NCOLS, i*2 + 3)
-            sns.histplot(self.data[f'time_{self.other_events[i]}'], 
+            sns.histplot(self.data[f'time_{self.predictor_events[i]}'], 
                          bins=BINS, 
                          kde=True)
             
             plt.subplot(NROWS, NCOLS, i*2 + 4)
-            sns.boxplot(y=self.data[f'time_{self.other_events[i]}'], 
+            sns.boxplot(y=self.data[f'time_{self.predictor_events[i]}'], 
                     width=kwargs.get('width'),
                     color=kwargs.get('color'), 
                     linecolor=kwargs.get('linecolor'))
 
-
-
-    # TODO: #1 Add influence plots, fit plot, ccpr
-    # https://www.statsmodels.org/devel/examples/notebooks/generated/regression_plots.html#Using-robust-regression-to-correct-for-outliers.
-         
         
-    def predict_time(self, times: List[str], events: List[int] | List[str] = None) -> float:
+    def fit_quantile(self, 
+                     q: float, 
+                     model: statsmodels.regression.quantile_regression.QuantReg) -> List[List[float]]:
+        '''Fit a linear model for a given quantile.
+        
+        Parameters:
+          -  q (float): the quantile to regress on
+          -  model (statsmodels.regression.quantile_regression.QuantReg): The unfit instantiation of a Quantile Regression model'''
+        
+        results = model.fit(q=q)
+
+        # TODO: #2 Make the return statement more generalizable for more parameters
+        return [q, results.params['Intercept'], results.params[f'time_{self.predictor_events[0]}'], results.params[f'time_{self.predictor_events[1]}']] + \
+            results.conf_int().loc[f'time_{self.predictor_events[0]}'].tolist() + \
+            results.conf_int().loc[f'time_{self.predictor_events[1]}'].tolist()
+    
+
+    def plot_quantiles_by_parameter(self, 
+                                    quantile_data: pd.DataFrame | None = None, 
+                                    ols_data: dict | None = None) -> None:
+        # TODO: #6 add docstring
+        # https://www.statsmodels.org/dev/examples/notebooks/generated/quantile_regression.html#Second-plot
+        # https://www.statsmodels.org/dev/generated/statsmodels.formula.api.quantreg.html#
+        '''Docstring'''
+
+        if quantile_data is None:
+            quantile_data = self.model[0]
+
+        if ols_data is None:
+            ols_data = self.model[1]
+
+        n = quantile_data.shape[0]
+        plt.figure(figsize=(12,5))  # TODO: #7 Make figsize, rest of plotting generalizable
+        plt.suptitle('Conditional Parameter Estimates across Quantiles')
+
+        plt.subplot(1, 2, 1)
+        p1 = plt.plot(quantile_data['q'], quantile_data[f'time_{self.predictor_events[0]}'], color='black', label=f'Quantile Reg {self.predictor_events[0]}m')
+        p2 = plt.plot(quantile_data['q'], quantile_data[f'time_{self.predictor_events[0]}_ub'], linestyle='dotted', color='black')
+        p3 = plt.plot(quantile_data['q'], quantile_data[f'time_{self.predictor_events[0]}_lb'], linestyle='dotted', color='black')
+        p4 = plt.plot(quantile_data['q'], [ols_data['b']] * n, color='red', label=f'OLS {self.predictor_events[0]}m')
+        p5 = plt.plot(quantile_data['q'], [ols_data['blb']] * n, linestyle='dotted', color='red')
+        p6 = plt.plot(quantile_data['q'], [ols_data['bub']] * n, linestyle='dotted', color='red')
+        plt.ylabel(fr'$\beta_{{time_{{{self.predictor_events[0]}}}}}$')
+        plt.xlabel(f'Quantiles of the conditional {self.outcome_event}m distribution')
+        plt.title(f'{self.predictor_events[0]}m')
+        plt.legend()
+
+        plt.subplot(1, 2, 2)
+        p7 =  plt.plot(quantile_data['q'], quantile_data[f'time_{self.predictor_events[1]}'], color='blue', label=f'Quantile Reg {self.predictor_events[1]}m')
+        p8 =  plt.plot(quantile_data['q'], quantile_data[f'time_{self.predictor_events[1]}_ub'], linestyle='dotted', color='blue')
+        p9 =  plt.plot(quantile_data['q'], quantile_data[f'time_{self.predictor_events[1]}_lb'], linestyle='dotted', color='blue')
+        p10 = plt.plot(quantile_data['q'], [ols_data['c']] * n, color='red', label=f'OLS {self.predictor_events[1]}m')
+        p11 = plt.plot(quantile_data['q'], [ols_data['clb']] * n, linestyle='dotted', color='red')
+        p12 = plt.plot(quantile_data['q'], [ols_data['cub']] * n, linestyle='dotted', color='red')
+        plt.ylabel(fr'$\beta_{{time_{{{self.predictor_events[1]}}}}}$')
+        plt.xlabel(f'Quantiles of the conditional {self.outcome_event}m distribution')
+        plt.title(f'{self.predictor_events[1]}m')
+        plt.legend()
+
+        plt.show()
+    
+    
+    def predict_time(self, 
+                     times: List[str], 
+                     events: List[int] | List[str] = None) -> float:
         '''Use the model's parameters to predict the average 800m time for a runner who runs a certain event in a certain time. No protection against extrapolation
         
         Parameters:
@@ -364,10 +498,13 @@ class MultivariateModel():
           -  estimate (float): the estimated time according to the parameters'''
         
         if events is None:
-            events = self.other_events
+            events = self.predictor_events
 
         # Grab coefficients
-        beta_0 = self.model.params['Intercept']
+        try:
+            beta_0 = self.model.params['Intercept']
+        except:
+            beta_0 = self.model.params['const']
 
         match str(events[0]).lower():
             case '400':
@@ -404,12 +541,14 @@ class MultivariateModel():
 
         
 
-def plot_bivariate_eda(data: pd.DataFrame, other_event: int, **kwargs) -> None:
+def plot_bivariate_eda(data: pd.DataFrame, title: str, outcome_event: int, predictor_event: int, **kwargs) -> None:
     '''Returns a scatter plot and two boxplots of the data in the `pd.DataFrame`
     
     Parameters:
-      -  data (pd.DataFrame): a `pd.DataFrame` of 800m and `other_event` data
-      -  other_event (int): the length of the other event in the data frame in meters'''
+      -  data (pd.DataFrame): a `pd.DataFrame` of 800m and `predictor_event` data
+      -  title (str): title for the group of plots
+      -  outcome_event (int): the distance in meters of the outcome event of interest
+      -  predictor_event (int): the distance in meters of the predictor event of interest'''
     
     sns.set_theme(style = 'whitegrid')
 
@@ -418,30 +557,31 @@ def plot_bivariate_eda(data: pd.DataFrame, other_event: int, **kwargs) -> None:
     kwargs.setdefault('thresh', 0.01)
     
     plt.figure(figsize=(10, 10))
+    plt.suptitle(title)
 
     plt.subplot(2, 2, 1)
-    plt.scatter(x=data[f'time_{other_event}'], 
-                y=data['time_800'], 
+    plt.scatter(x=data[f'time_{predictor_event}'], 
+                y=data[f'time_{outcome_event}'], 
                 alpha = 0.3)
-    plt.xlabel(f'time_{other_event}')
-    plt.ylabel('time_800')
+    plt.xlabel(f'time_{predictor_event}')
+    plt.ylabel(f'time_{outcome_event}')
 
     plt.subplot(2, 2, 2)
-    sns.kdeplot(x=data[f'time_{other_event}'], 
-                y=data['time_800'], 
+    sns.kdeplot(x=data[f'time_{predictor_event}'], 
+                y=data[f'time_{outcome_event}'], 
                 thresh=kwargs.get('thresh'),
                 cmap='cividis')
 
     plt.subplot(2, 2, 3)
-    sns.boxplot(y=data['time_800'], 
+    sns.boxplot(y=data[f'time_{outcome_event}'], 
                 width=0.3, 
                 color=kwargs.get('color'), 
                 linecolor=kwargs.get('linecolor'))
-    plt.title('800m')
+    plt.title(f'{outcome_event}m')
 
     plt.subplot(2, 2, 4)
-    sns.boxplot(y=data[f'time_{other_event}'], 
+    sns.boxplot(y=data[f'time_{predictor_event}'], 
                 width=0.3, 
                 color=kwargs.get('color'), 
                 linecolor=kwargs.get('linecolor'))
-    plt.title(f'{other_event}m')
+    plt.title(f'{predictor_event}m')
