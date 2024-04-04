@@ -177,4 +177,4 @@ class TFRRSScraper():
 
             dfs = pd.concat([dfs, df])
 
-        return dfs.drop_duplicates()
+        return dfs.drop_duplicates().reset_index(drop=True)
