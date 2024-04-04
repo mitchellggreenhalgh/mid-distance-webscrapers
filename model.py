@@ -12,6 +12,7 @@ from linear_diagnostics import LinearRegDiagnostic
 from sklearn.preprocessing import PolynomialFeatures
 from statsmodels.tools.tools import add_constant
 
+
 class BivariateModel():
     '''Wrapper for `statsmodels.api` with additional methods for assumption checking.'''
 
