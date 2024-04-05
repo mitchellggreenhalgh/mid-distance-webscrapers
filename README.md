@@ -1,6 +1,8 @@
 # mid-distance-webscrapers
  A pair of modules to scrape mid-distance data from TFRRS and MileSplit. Can be adapted for other events.
 
+ To run scrape_milesplit.py, you will need to set up a .env file with your username and password to MileSplit.com and the path to your chromedriver executable.
+
 
 # Required software
 
