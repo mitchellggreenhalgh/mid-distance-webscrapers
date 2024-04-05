@@ -72,8 +72,8 @@ class BivariateModel():
                 ols = dict(
                     a=ols.params['Intercept'], 
                     b=ols.params[f'time_{self.predictor_event}'], 
-                    blb=ols_ci_b[0], 
-                    bub=ols_ci_b[1], 
+                    bll=ols_ci_b[0], 
+                    bul=ols_ci_b[1], 
                 )
 
                 return model_df, ols
@@ -213,8 +213,8 @@ class BivariateModel():
         p2 = plt.plot(quantile_data['q'], quantile_data[f'time_{self.predictor_event}_ub'], linestyle='dotted', color='black')
         p3 = plt.plot(quantile_data['q'], quantile_data[f'time_{self.predictor_event}_lb'], linestyle='dotted', color='black')
         p4 = plt.plot(quantile_data['q'], [ols_data['b']] * n, color='red', label=f'OLS {self.predictor_event}m')
-        p5 = plt.plot(quantile_data['q'], [ols_data['blb']] * n, linestyle='dotted', color='red')
-        p6 = plt.plot(quantile_data['q'], [ols_data['bub']] * n, linestyle='dotted', color='red')
+        p5 = plt.plot(quantile_data['q'], [ols_data['bll']] * n, linestyle='dotted', color='red')
+        p6 = plt.plot(quantile_data['q'], [ols_data['bul']] * n, linestyle='dotted', color='red')
         plt.ylabel(fr'$\beta_{{time_{{{self.predictor_event}}}}}$')
         plt.xlabel(f'Quantiles of the conditional {self.outcome_event}m distribution')
         plt.legend()
@@ -332,10 +332,10 @@ class MultivariateModel():
                     a=ols.params['Intercept'], 
                     b=ols.params[f'time_{self.predictor_events[0]}'], 
                     c=ols.params[f'time_{self.predictor_events[1]}'], 
-                    blb=ols_ci_b[0], 
-                    bub=ols_ci_b[1], 
-                    clb=ols_ci_c[0],
-                    cub=ols_ci_c[1],
+                    bll=ols_ci_b[0], 
+                    bul=ols_ci_b[1], 
+                    cll=ols_ci_c[0],
+                    cul=ols_ci_c[1],
                 )
 
                 return model_df, ols
@@ -449,6 +449,8 @@ class MultivariateModel():
         # https://www.statsmodels.org/dev/generated/statsmodels.formula.api.quantreg.html#
         '''Docstring'''
 
+        sns.set_theme(style='whitegrid')
+
         if quantile_data is None:
             quantile_data = self.model[0]
 
@@ -464,8 +466,8 @@ class MultivariateModel():
         p2 = plt.plot(quantile_data['q'], quantile_data[f'time_{self.predictor_events[0]}_ub'], linestyle='dotted', color='black')
         p3 = plt.plot(quantile_data['q'], quantile_data[f'time_{self.predictor_events[0]}_lb'], linestyle='dotted', color='black')
         p4 = plt.plot(quantile_data['q'], [ols_data['b']] * n, color='red', label=f'OLS {self.predictor_events[0]}m')
-        p5 = plt.plot(quantile_data['q'], [ols_data['blb']] * n, linestyle='dotted', color='red')
-        p6 = plt.plot(quantile_data['q'], [ols_data['bub']] * n, linestyle='dotted', color='red')
+        p5 = plt.plot(quantile_data['q'], [ols_data['bll']] * n, linestyle='dotted', color='red')
+        p6 = plt.plot(quantile_data['q'], [ols_data['bul']] * n, linestyle='dotted', color='red')
         plt.ylabel(fr'$\beta_{{time_{{{self.predictor_events[0]}}}}}$')
         plt.xlabel(f'Quantiles of the conditional {self.outcome_event}m distribution')
         plt.title(f'{self.predictor_events[0]}m')
@@ -476,8 +478,8 @@ class MultivariateModel():
         p8 =  plt.plot(quantile_data['q'], quantile_data[f'time_{self.predictor_events[1]}_ub'], linestyle='dotted', color='blue')
         p9 =  plt.plot(quantile_data['q'], quantile_data[f'time_{self.predictor_events[1]}_lb'], linestyle='dotted', color='blue')
         p10 = plt.plot(quantile_data['q'], [ols_data['c']] * n, color='red', label=f'OLS {self.predictor_events[1]}m')
-        p11 = plt.plot(quantile_data['q'], [ols_data['clb']] * n, linestyle='dotted', color='red')
-        p12 = plt.plot(quantile_data['q'], [ols_data['cub']] * n, linestyle='dotted', color='red')
+        p11 = plt.plot(quantile_data['q'], [ols_data['cll']] * n, linestyle='dotted', color='red')
+        p12 = plt.plot(quantile_data['q'], [ols_data['cul']] * n, linestyle='dotted', color='red')
         plt.ylabel(fr'$\beta_{{time_{{{self.predictor_events[1]}}}}}$')
         plt.xlabel(f'Quantiles of the conditional {self.outcome_event}m distribution')
         plt.title(f'{self.predictor_events[1]}m')
@@ -541,12 +543,11 @@ class MultivariateModel():
         return f'{self.outcome_event}m Prediction: {round(beta_0 + beta_1 * time_1_sec + beta_2 * time_2_sec, 2)} seconds'
 
         
-
 def plot_bivariate_eda(data: pd.DataFrame, title: str, outcome_event: int, predictor_event: int, **kwargs) -> None:
     '''Returns a scatter plot and two boxplots of the data in the `pd.DataFrame`
     
     Parameters:
-      -  data (pd.DataFrame): a `pd.DataFrame` of 800m and `predictor_event` data
+      -  data (pd.DataFrame): a `pd.DataFrame` of outcome_event and predictor_event data
       -  title (str): title for the group of plots
       -  outcome_event (int): the distance in meters of the outcome event of interest
       -  predictor_event (int): the distance in meters of the predictor event of interest'''
