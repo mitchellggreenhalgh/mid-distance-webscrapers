@@ -62,8 +62,8 @@ class BivariateModel():
                         'q', 
                         'intercept', 
                         f'time_{self.predictor_event}', 
-                        f'time_{self.predictor_event}_lb', 
-                        f'time_{self.predictor_event}_ub'
+                        f'time_{self.predictor_event}_ll', 
+                        f'time_{self.predictor_event}_ul'
                         ]
                     )
                 
@@ -210,8 +210,8 @@ class BivariateModel():
         plt.title(f'Conditional Parameter Estimates across {self.outcome_event}m Quantiles')
 
         p1 = plt.plot(quantile_data['q'], quantile_data[f'time_{self.predictor_event}'], color='black', label=f'Quantile Reg {self.predictor_event}m')
-        p2 = plt.plot(quantile_data['q'], quantile_data[f'time_{self.predictor_event}_ub'], linestyle='dotted', color='black')
-        p3 = plt.plot(quantile_data['q'], quantile_data[f'time_{self.predictor_event}_lb'], linestyle='dotted', color='black')
+        p2 = plt.plot(quantile_data['q'], quantile_data[f'time_{self.predictor_event}_ul'], linestyle='dotted', color='black')
+        p3 = plt.plot(quantile_data['q'], quantile_data[f'time_{self.predictor_event}_ll'], linestyle='dotted', color='black')
         p4 = plt.plot(quantile_data['q'], [ols_data['b']] * n, color='red', label=f'OLS {self.predictor_event}m')
         p5 = plt.plot(quantile_data['q'], [ols_data['bll']] * n, linestyle='dotted', color='red')
         p6 = plt.plot(quantile_data['q'], [ols_data['bul']] * n, linestyle='dotted', color='red')
@@ -317,10 +317,10 @@ class MultivariateModel():
                         'intercept', 
                         f'time_{self.predictor_events[0]}', 
                         f'time_{self.predictor_events[1]}', 
-                        f'time_{self.predictor_events[0]}_lb', 
-                        f'time_{self.predictor_events[0]}_ub', 
-                        f'time_{self.predictor_events[1]}_lb', 
-                        f'time_{self.predictor_events[1]}_ub'
+                        f'time_{self.predictor_events[0]}_ll', 
+                        f'time_{self.predictor_events[0]}_ul', 
+                        f'time_{self.predictor_events[1]}_ll', 
+                        f'time_{self.predictor_events[1]}_ul'
                         ]
                     )
                 
@@ -463,8 +463,8 @@ class MultivariateModel():
 
         plt.subplot(1, 2, 1)
         p1 = plt.plot(quantile_data['q'], quantile_data[f'time_{self.predictor_events[0]}'], color='black', label=f'Quantile Reg {self.predictor_events[0]}m')
-        p2 = plt.plot(quantile_data['q'], quantile_data[f'time_{self.predictor_events[0]}_ub'], linestyle='dotted', color='black')
-        p3 = plt.plot(quantile_data['q'], quantile_data[f'time_{self.predictor_events[0]}_lb'], linestyle='dotted', color='black')
+        p2 = plt.plot(quantile_data['q'], quantile_data[f'time_{self.predictor_events[0]}_ul'], linestyle='dotted', color='black')
+        p3 = plt.plot(quantile_data['q'], quantile_data[f'time_{self.predictor_events[0]}_ll'], linestyle='dotted', color='black')
         p4 = plt.plot(quantile_data['q'], [ols_data['b']] * n, color='red', label=f'OLS {self.predictor_events[0]}m')
         p5 = plt.plot(quantile_data['q'], [ols_data['bll']] * n, linestyle='dotted', color='red')
         p6 = plt.plot(quantile_data['q'], [ols_data['bul']] * n, linestyle='dotted', color='red')
@@ -475,8 +475,8 @@ class MultivariateModel():
 
         plt.subplot(1, 2, 2)
         p7 =  plt.plot(quantile_data['q'], quantile_data[f'time_{self.predictor_events[1]}'], color='blue', label=f'Quantile Reg {self.predictor_events[1]}m')
-        p8 =  plt.plot(quantile_data['q'], quantile_data[f'time_{self.predictor_events[1]}_ub'], linestyle='dotted', color='blue')
-        p9 =  plt.plot(quantile_data['q'], quantile_data[f'time_{self.predictor_events[1]}_lb'], linestyle='dotted', color='blue')
+        p8 =  plt.plot(quantile_data['q'], quantile_data[f'time_{self.predictor_events[1]}_ul'], linestyle='dotted', color='blue')
+        p9 =  plt.plot(quantile_data['q'], quantile_data[f'time_{self.predictor_events[1]}_ll'], linestyle='dotted', color='blue')
         p10 = plt.plot(quantile_data['q'], [ols_data['c']] * n, color='red', label=f'OLS {self.predictor_events[1]}m')
         p11 = plt.plot(quantile_data['q'], [ols_data['cll']] * n, linestyle='dotted', color='red')
         p12 = plt.plot(quantile_data['q'], [ols_data['cul']] * n, linestyle='dotted', color='red')
