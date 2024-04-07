@@ -424,6 +424,11 @@ class MileSplitScraper():
                         case 'girls':
                             event = '100H'
 
+        # If 2k Steeple Chase, the season must be 'outdoor'
+        if event == '2000mSC':
+            season = 'outdoor'
+      
+
         dfs = None
 
         # TODO: For full production, turn the range from 1 -> 21
