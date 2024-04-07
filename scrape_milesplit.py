@@ -15,7 +15,7 @@ from typing import List
 FIRST_URL = 'https://www.milesplit.com/rankings/events/high-school-girls/indoor-track-and-field/800m?year=2024&accuracy=fat&grade=all&ageGroup=&league=0&meet=0&team=0&venue=0&conversion=n&page=1'
 
 config = dotenv_values('.env')
-
+    
 
 class MileSplitScraper():
     '''A class to download running data from the national MileSplit database.
@@ -42,7 +42,7 @@ class MileSplitScraper():
           -  url (`str`): a URL to the milesplit rankings portion of the website to log in on and start scraping
           -  sex (`str` | `None`): 'm', 'f', or None. If 'm' or 'f' is indicated, only that sex will be downloaded
 
-        Event options: '100m', '200m', '400m', '110H', '300H', '400H', '800m', '1500m', '1600m', 'Mile', '3000m', '3200m', '2Mile', '2000mSC'
+        Event options: '100m', '200m', '400m', '110H', '300H', '400H', '800m', '1500m', '1600m', 'Mile', '2000mSC', '3000m', '3200m', '2Mile' 
         '''
 
         self.outcome_event = outcome_event
@@ -59,10 +59,18 @@ class MileSplitScraper():
         self.OPTIONS.add_experimental_option('excludeSwitches', ['enable-logging'])
         self.OPTIONS.add_argument("--disable-blink-features=AutomationControlled")
 
+        self.conversion_factors = {
+            '1600_to_1500': 0.9375,
+            '3200_to_3000': 0.9375,
+            'mile_to_1500': 0.9321,
+            '2mile_to_3000': 0.9321
+        }
+
     
     def __repr__(self):
         return f'Scraper object for [{self.website}]'
     
+
     def __call__(self, start: int, end: int) -> pd.DataFrame:
         '''Run the whole scraping program for all levels, all sexes, all events, over the specified range of years
 
@@ -191,7 +199,23 @@ class MileSplitScraper():
             return 60 * int(str(row)[0]) + float(str(row)[2:7])
         
 
-    def clean_1500m_times(self, row: str) -> float:
+    def clean_1500_3000_times(self, row: str) -> float:
+        '''Take each row of a pd.DataFrame column of 1500m or 3000m times and convert it to seconds
+        
+        Parameters:
+          -  row (`str`): the rows of the `pd.DataFrame` 1500m or 3000m column
+
+        Returns:
+          - val (`float`): the value of the 1500m/3000m time in seconds
+        '''
+
+        if str(row)[0] == '1':  # 10 mins or greater
+            return round(((60 * int(str(row)[:2]) + float(str(row)[3:8]))), ndigits=2)
+        else:
+            return round(((60 * int(str(row)[0]) + float(str(row)[2:7]))), ndigits=2)
+    
+    
+    def clean_steeple_times(self, row: str) -> float:
         '''Take each row of a pd.DataFrame column of 1500m times and convert it to seconds
         
         Parameters:
@@ -207,22 +231,42 @@ class MileSplitScraper():
             return round(((60 * int(str(row)[0]) + float(str(row)[2:7]))), ndigits=2)
 
 
-    def convert_mile_times(self, row: str) -> float:
+    def convert_mile_times(self, row: str, event: str) -> float:
         '''Take each row of a pd.Series of mile or 1600m data and convert it to 1500m times in seconds
         
         Parameters:
           -  row (`str`): the rows of the `pd.DataFrame` column
+          -  event (`str`): the event of interest identified for conversion
 
         Returns:
           - val (`float`): the value of the converted 1500m time in seconds
         '''
         
-        SCALAR = 0.93205678835 if self.predictor_events == 'Mile' else 0.9375
+        CONV_FACTOR = self.conversion_factors['mile_to_1500'] if event == 'Mile' else self.conversion_factors['1600_to_1500']
 
         if str(row)[0] == '1':  # 10 mins or greater
-            return round(((60 * int(str(row)[:2]) + float(str(row)[3:8])) * SCALAR), ndigits=2)
+            return round(((60 * int(str(row)[:2]) + float(str(row)[3:8])) * CONV_FACTOR), ndigits=2)
         else:
-            return round(((60 * int(str(row)[0]) + float(str(row)[2:7])) * SCALAR), ndigits=2)
+            return round(((60 * int(str(row)[0]) + float(str(row)[2:7])) * CONV_FACTOR), ndigits=2)
+    
+    
+    def convert_2mile_times(self, row: str, event: str) -> float:
+        '''Take each row of a pd.Series of 2 mile or 3200m data and convert it to 3000m times in seconds
+        
+        Parameters:
+          -  row (`str`): the rows of the `pd.DataFrame` column
+          -  event (`str`): the event of interest identified for conversion
+
+        Returns:
+          - val (`float`): the value of the converted 3000m time in seconds
+        '''
+        
+        CONV_FACTOR = self.conversion_factors['2mile_to_3000'] if event == '2Mile' else self.conversion_factors['3200_to_3000']
+
+        if str(row)[0] == '1':  # 10 mins or greater
+            return round(((60 * int(str(row)[:2]) + float(str(row)[3:8])) * CONV_FACTOR), ndigits=2)
+        else:
+            return round(((60 * int(str(row)[0]) + float(str(row)[2:7])) * CONV_FACTOR), ndigits=2)
                   
     
     def determine_col_name(self, event: str) -> str:
@@ -290,26 +334,43 @@ class MileSplitScraper():
                     if all(df['time'].str.len() == 7):
                         df[self.determine_col_name(event)] = (60 * df['time'].str[0].astype('int') + df['time'].str[2:7].astype('float')).round(2)
                     else:
-                        df[self.determine_col_name(event)] = df['time'].apply(self.clean_1500m_times)
+                        df[self.determine_col_name(event)] = df['time'].apply(self.clean_1500_3000_times)
 
                 case '1600m':
                     if all(df['time'].str.len() == 7):
-                        df[self.determine_col_name(event)] = ((60 * df['time'].str[0].astype('int') + df['time'].str[2:7].astype('float')) * 0.9375).round(2)
+                        df[self.determine_col_name(event)] = ((60 * df['time'].str[0].astype('int') + df['time'].str[2:7].astype('float')) * self.conversion_factors['1600_to_1500']).round(2)
                     else:
-                        df[self.determine_col_name(event)] = df['time'].apply(self.convert_mile_times)
+                        df[self.determine_col_name(event)] = df['time'].apply(self.convert_mile_times, event=event)
 
                 case 'Mile':
                     if all(df['time'].str.len() == 7):
-                        df[self.determine_col_name(event)] = ((60 * df['time'].str[0].astype('int') + df['time'].str[2:7].astype('float')) * 0.93205678835).round(2)
+                        df[self.determine_col_name(event)] = ((60 * df['time'].str[0].astype('int') + df['time'].str[2:7].astype('float')) * self.conversion_factors['mile_to_1500']).round(2)
                     else:
-                        df[self.determine_col_name(event)] = df['time'].apply(self.convert_mile_times)
+                        df[self.determine_col_name(event)] = df['time'].apply(self.convert_mile_times, event=event)
 
-                # TODO: #11 add processing for rest of events
-                case '3000m' | '3200m' | '2Mile' | '2000mSC':
-                    raise NotImplementedError
-                
-        except NotImplementedError:
-            print(f'''Need to add processing feature for {event}''')
+                case '2000mSC':
+                    if all(df['time'].str.len() == 7):
+                        df[self.determine_col_name(event)] = (60 * df['time'].str[0].astype('int') + df['time'].str[2:7].astype('float')).round(2)
+                    else:
+                        df[self.determine_col_name(event)] = df['time'].apply(self.clean_steeple_times)
+
+                case '3000m':
+                    if all(df['time'].str.len() == 7):
+                        df[self.determine_col_name(event)] = (60 * df['time'].str[0].astype('int') + df['time'].str[2:7].astype('float')).round(2)
+                    else:
+                        df[self.determine_col_name(event)] = df['time'].apply(self.clean_1500_3000_times)
+
+                case '3200m':
+                    if all(df['time'].str.len() == 7):
+                        df[self.determine_col_name(event)] = ((60 * df['time'].str[0].astype('int') + df['time'].str[2:7].astype('float')) * self.conversion_factors['3200_to_3000']).round(2)
+                    else:
+                        df[self.determine_col_name(event)] = df['time'].apply(self.convert_2mile_times, event=event)
+
+                case '2Mile':
+                    if all(df['time'].str.len() == 7):
+                        df[self.determine_col_name(event)] = ((60 * df['time'].str[0].astype('int') + df['time'].str[2:7].astype('float')) * self.conversion_factors['2mile_to_3000']).round(2)
+                    else:
+                        df[self.determine_col_name(event)] = df['time'].apply(self.convert_2mile_times, event=event)
 
         except ValueError:
             print(f'''ValueError in {year}'s {season} {event}''')
@@ -346,6 +407,7 @@ class MileSplitScraper():
           -  dfs (`pd.DataFrame`): a pd.DataFrame of all 20 pages of event data that belongs to a single sex
         '''
 
+        # Indoor sprint specifications and outdoor girls/boys short hurdles specifications
         match season:
             case 'indoor':
                 match event:
