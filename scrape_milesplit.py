@@ -33,7 +33,7 @@ class MileSplitScraper():
                  outcome_event: str, 
                  predictor_events: str | List[str] | None=None, 
                  url: str=FIRST_URL, 
-                 sex: str | None=None):
+                 sex: str | None=None) -> None:
         '''Initializes the MileSplitScraper class. If only an outcome event is specified, the entire event is downloaded with no other modifications. If one or more predictor events are specified, the outcome event and the predictor event(s) will be joined together and filtered such that the results will only consist of athletes who have run all of the specified events in a single season and whose top performances for the specified events all appear in the top 1000 in the national rankings.
         
         Parameters:
@@ -67,7 +67,7 @@ class MileSplitScraper():
         }
 
     
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f'Scraper object for [{self.website}]'
     
 
