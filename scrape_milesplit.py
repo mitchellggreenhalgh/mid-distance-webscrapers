@@ -176,7 +176,20 @@ class MileSplitScraper():
             return row
         else:
             return 60 * int(str(row)[0]) + float(str(row)[2:7])
+    
+    
+    def clean_hurdle_times(self, row: str | float) -> float:
+        '''Take each row of a pd.Series of 300H and 400H data and modify it according to its format
+        
+        Parameters:
+          -  row (`str` | `float`): Pages with everything below 1 minute comes in as a float, and a page witheverything above comes as a string. If a page of results has both under 1 minute and above 1 minute on the same page, they all come as a string.
+        '''
 
+        if str(row)[0] in ['3', '4', '5']:
+            return row
+        else:
+            return 60 * int(str(row)[0]) + float(str(row)[2:7])
+        
 
     def clean_1500m_times(self, row: str) -> float:
         '''Take each row of a pd.DataFrame column of 1500m times and convert it to seconds
@@ -261,6 +274,12 @@ class MileSplitScraper():
                 case '60m' | '60H' | '100m' | '200m' | '100H' | '110H':
                     df[self.determine_col_name(event)] = df['time'].astype('float')
 
+                case '300H' | '400H':
+                    if df['time'].dtype == 'float64':
+                        df[self.determine_col_name(event)] = df['time']
+                    else:
+                        df[self.determine_col_name(event)] = df['time'].apply(self.clean_hurdle_times)
+
                 case '400m':
                     df[self.determine_col_name(event)] = df['time'].apply(self.clean_400m_times)
 
@@ -286,12 +305,12 @@ class MileSplitScraper():
                         df[self.determine_col_name(event)] = df['time'].apply(self.convert_mile_times)
 
                 # TODO: #11 add processing for rest of events
-                case '300H' | '400H':
-                    raise NotImplementedError
-                
                 case '3000m' | '3200m' | '2Mile' | '2000mSC':
                     raise NotImplementedError
                 
+        except NotImplementedError:
+            print(f'''Need to add processing feature for {event}''')
+
         except ValueError:
             print(f'''ValueError in {year}'s {season} {event}''')
 
@@ -326,9 +345,6 @@ class MileSplitScraper():
         Returns:
           -  dfs (`pd.DataFrame`): a pd.DataFrame of all 20 pages of event data that belongs to a single sex
         '''
-
-        # TODO: #12 Set up 110H/100H boys/girls logic
-        # TODO: Set up indoor/outdoor logic for hurdles and sprints (100m -> 60m, 100H/110H -> 60mH)
 
         match season:
             case 'indoor':
