@@ -424,15 +424,15 @@ class MileSplitScraper():
                         case 'girls':
                             event = '100H'
 
-        # If 2k Steeple Chase, the season must be 'outdoor'
-        if event == '2000mSC':
+        # If 2k Steeple or long hurdles, season must be 'outdoor'
+        if event in ['2000mSC', '300H', '400H']:
             season = 'outdoor'
       
-
+        # Iterate through pages
         dfs = None
 
         # TODO: For full production, turn the range from 1 -> 21
-        for page in range(1, 3, 1):
+        for page in range(1, 21, 1):
             # Create URL
             url = self.create_url(level, sex, season, event, year, page)
             driver.get(url)
@@ -478,11 +478,11 @@ class MileSplitScraper():
         '''
 
         df_outcome = self.download_single_event(driver=driver,
-                                            level=level,
-                                            sex=sex,
-                                            season=season,
-                                            event=self.outcome_event,
-                                            year=year)
+                                                level=level,
+                                                sex=sex,
+                                                season=season,
+                                                event=self.outcome_event,
+                                                year=year)
         
         outcome_col = self.determine_col_name(self.outcome_event)
 
