@@ -96,7 +96,7 @@ class TFRRSScraper():
         return f'Scraper object for [{self.website}]'
 
 
-    def produce_outcome_url_by_season(self,
+    def produce_outcome_url_by_season_key(self,
                                       season_idx: str, 
                                       sex: str,
                                       outcome_event: str | None = None) -> str:
@@ -151,13 +151,16 @@ class TFRRSScraper():
             outcome_event = self.outcome_event
 
         if sex is None:
+            sex = self.sex
+
+        if sex is None:
           urls_for_seasons_dict = []
           for key in seasons_dict:
-              urls_for_seasons_dict += self.produce_outcome_url_by_season(season_idx=key, 
+              urls_for_seasons_dict += self.produce_outcome_url_by_season_key(season_idx=key, 
                                                                             sex='m', 
                                                                             outcome_event=outcome_event)
               
-              urls_for_seasons_dict += self.produce_outcome_url_by_season(season_idx=key, 
+              urls_for_seasons_dict += self.produce_outcome_url_by_season_key(season_idx=key, 
                                                                             sex='f', 
                                                                             outcome_event=outcome_event)
           return urls_for_seasons_dict
@@ -165,14 +168,14 @@ class TFRRSScraper():
         else:
             urls_for_seasons_dict = []
             for key in seasons_dict:
-                urls_for_seasons_dict += self.produce_outcome_url_by_season(season_idx=key, 
+                urls_for_seasons_dict += self.produce_outcome_url_by_season_key(season_idx=key, 
                                                                               sex=sex, 
                                                                               outcome_event=outcome_event)
             return urls_for_seasons_dict
 
     
     
-    def produce_predictor_urls_by_season(self,
+    def produce_predictor_urls_by_season_key(self,
                                          season_idx: str,
                                          sex: str,
                                          event_list: List[str] | None = None) -> List[str]:
@@ -211,7 +214,7 @@ class TFRRSScraper():
     
 
     def produce_predictor_urls_by_season_dict(self, 
-                                              sex: str,
+                                              sex: str | None = None,
                                               seasons_dict: Dict[str, str] | None = None,
                                               event_list: List[str] | None = None) -> List[str]:
         '''Takes the season_dict and produces all the URLs for all the predictor events'''
@@ -222,18 +225,30 @@ class TFRRSScraper():
         if event_list is None:
             event_list = self.predictor_events
 
-        urls_for_seasons_dict = []
-        for key in seasons_dict:
-            urls_for_seasons_dict += self.produce_predictor_urls_by_season(season_idx=key, 
-                                                                           sex='m', 
-                                                                           event_list=event_list)
-            
-            urls_for_seasons_dict += self.produce_predictor_urls_by_season(season_idx=key, 
-                                                                           sex='f', 
-                                                                           event_list=event_list)
-            
-        return urls_for_seasons_dict
-      
+        if sex is None:
+            sex = self.sex
+
+        if sex is None:
+          urls_for_seasons_dict = []
+          for key in seasons_dict:
+              urls_for_seasons_dict += self.produce_predictor_urls_by_season_key(season_idx=key, 
+                                                                            sex='m', 
+                                                                            event_list=event_list)
+              
+              urls_for_seasons_dict += self.produce_predictor_urls_by_season_key(season_idx=key, 
+                                                                            sex='f', 
+                                                                            event_list=event_list)
+              
+          return urls_for_seasons_dict
+        
+        else:
+            urls_for_seasons_dict = []
+            for key in seasons_dict:
+                urls_for_seasons_dict += self.produce_predictor_urls_by_season_key(season_idx=key, 
+                                                                              sex=sex,
+                                                                              event_list=event_list)
+                
+            return urls_for_seasons_dict
 
     # def download_and_clean_single_event(self, 
     #                           url: str, 
