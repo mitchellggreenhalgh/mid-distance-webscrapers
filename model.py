@@ -22,7 +22,9 @@ class BivariateModel():
                  outcome_event: int, 
                  predictor_event: int, 
                  model_type: str) -> None:
-        '''Parameters:
+        '''Initializer for the BivariateModel class.
+        
+        Parameters:
           -  data (`pd.DataFrame`): a DataFrame with outcome and predictor data
           -  outcome_event (`int`): the outcome event to be analyzed. Options: 400, 800, or 1500
           -  predictor_event (`int`): the predictor event being analyzed. Options: 400, 800, or 1500, exclusive of the outcome event
