@@ -3,8 +3,9 @@
 import re
 from datetime import datetime
 from glob import glob
-from typing import Dict, List
+from typing import Dict, List, Tuple, Any, Type
 from os import makedirs
+from deprecated import deprecated
 
 import pandas as pd
 
@@ -21,6 +22,8 @@ __valid_events__ = [
   '5000', 
   '10000'
 ]
+
+PredictorResultsDict = Type[Dict[str, Dict[str, Dict[int, Any]]]]
 
 
 class TFRRSScraper():
@@ -102,6 +105,9 @@ class TFRRSScraper():
         if self.sex is not None and self.sex not in ['f', 'm']:
             raise ValueError('''Please enter an appropriate sex: 'f' or 'm' ''')
 
+        if self.predictor_events is None and self.merge:
+            raise ValueError('Merge can only be `True` if predictor events are specified')
+
 
     def __repr__(self):
         return f'Scraper object for [{self.website}]'
@@ -109,7 +115,6 @@ class TFRRSScraper():
 
     def __call__(self):
         self.download_and_export_data()
-        return NotImplementedError
 
 
     def produce_outcome_url_by_season_key(self,
@@ -224,6 +229,9 @@ class TFRRSScraper():
             if event in ['400H', '3000SC', '10000'] and season == 'indoor':
                 continue
 
+            if event in ['3000'] and season == 'outdoor':
+                continue
+
             url_dict = url_dict | {f'{season_idx}_{sex}_{event}': 
                                                 f'''{re.sub(pattern=r'event_type=[0-9]{2}', 
                                                     repl=self.event_dict[key], 
@@ -270,32 +278,6 @@ class TFRRSScraper():
             return urls_for_seasons_dict
 
 
-    def convert_event(self, df: pd.DataFrame, key: str) -> pd.DataFrame:
-        '''Take a pd.DataFrame of a TFRRS table and convert the time column into seconds
-        
-        Parameters:
-          -  df (`pd.DataFrame`): the output of pd.read_html() directly from a TFRRS table URL
-          -  key (`str`): the key of the url dictionary that produced the URL to the TFRRS table
-          
-        Returns:
-          -  df (`pd.DataFrame`): the same dataframe, but with the time column converted to seconds from `%m:%s.%f`
-        '''
-        
-        event = key.split('_')[3]
-
-        match event:
-            case '100' | '110H' | '200':
-                df[f'time_{event}'] = df[f'time_{event}'].astype('float')
-
-            case '400' | '400H':
-                df[f'time_{event}'] = df[f'time_{event}'].apply(self.clean_400m_times)
-
-            case _:
-                df[f'time_{event}'] = df[f'time_{event}'].apply(self.clean_distance_times) 
-
-        return df
-
-
     def download_single_outcome_table(self, url: str) -> pd.DataFrame:
         '''Extract data from a given tfrrs.org URL.
         
@@ -305,30 +287,67 @@ class TFRRSScraper():
 
         df = pd.read_html(url, attrs={'id': 'myTable'})[0][['Athlete', 'Team', 'Time']]
 
-        df[[f'time_{self.outcome_event}', f'{self.outcome_event}_tag']] = df['Time'].str.split(' ', n=1, expand=True)
         df['athlete_team'] = df['Athlete'] + ' | ' + df['Team']
+        df[[f'time_{self.outcome_event}', f'{self.outcome_event}_tag']] = df['Time'].str.split(' ', n=1, expand=True)
 
         df_format = ['athlete_team', f'time_{self.outcome_event}', f'{self.outcome_event}_tag']
         
         return df.drop(columns=['Athlete', 'Team', 'Time'])[df_format]
     
 
-    def download_single_predictor_table(self, url: str, key: str) -> pd.DataFrame:
-        '''Docstring'''
+    def download_single_predictor_table(self, 
+                                        url: str, 
+                                        key: str) -> PredictorResultsDict:
+        '''Download a single TFRRS table using a URL from the predictors URL dictionary.
+        
+        Parameters:
+          -  url (`str`): the URL from the predictors URL dictionary
+          -  key (`str`): the key from the dictionary that produced the URL
+          
+        Returns:
+          -  data_dict (`Dict`): A dictionary of dictionaries for a single predictor event, season, and sex. The first key is the 'season_year_sex_event' identifier for the data. The value of this key is another dictionary whose keys are the column names of the downloaded TFRRS table. The values of the column name keys are a final set of dictionaries, whose keys are the row indices of the downloaded table and whose values are the corresponding data values from the TFRRS table.
+          
+        Running the function `pd.DataFrame.from_dict()` on `data_dict[key]` will return the downloaded `pd.DataFrame`
+        '''
 
         df = pd.read_html(url, attrs={'id': 'myTable'})[0][['Athlete', 'Team', 'Time']]
 
+        df['athlete_team'] = df['Athlete'] + ' | ' + df['Team']
+
+        # Need to match url specific events to predictor events
+        key_vars = key.split('_')
+        event = key_vars[3]
+        match event:
+            case '60':
+                time_col = 'time_100'
+            case '60H':
+                time_col = 'time_110H'
+            case '100H':
+                time_col = 'time_110H'
+            case 'mile':
+                time_col = 'time_1500'
+            case _:
+                time_col = f'time_{event}'
+
+        df[[time_col, f"{time_col.split('_')[1]}_tag"]] = df['Time'].str.split(' ', n=1, expand=True)
+
+        df = df.pipe(self.convert_event, predictor_col=time_col) \
+               .assign(sex=key_vars[2],
+                       season=f'{key_vars[0]}_{key_vars[1]}')
         
+        df_format = ['athlete_team', time_col, f"{time_col.split('_')[1]}_tag", 'sex', 'season']
 
-        return df.to_dict()
-
-    
+        return {f"{'_'.join(key_vars[:3])}_{time_col.split('_')[1]}": df[df_format].to_dict()}
+            
 
     def download_outcome_event(self, export: bool = False) -> pd.DataFrame | None:
         '''Combine all TFRRS tables of outcome variable.
         
         Parameters:
-          -  export (`bool`): if True, the outcome event's table is exported to the data folder and no pd.DataFrame is returned. If False, the data table is returned as a pd.DataFrame and not exported.'''
+          -  export (`bool`): if True, the outcome event's table is exported to the data folder and no pd.DataFrame is returned. If False, the data table is returned as a pd.DataFrame and not exported.
+          
+        Returns:
+          - dfs (`pd.DataFrame` | `None`): if `export=True`, `None` is returned. Otherwise, a `pd.DataFrame` of all the outcome event data from the seasons dictionary is returned.'''
 
         url_dict = self.produce_outcome_urls_by_season_dict()
         dfs = None
@@ -342,7 +361,7 @@ class TFRRSScraper():
             df = self.download_single_outcome_table(url_dict[i]) \
                 .assign(sex=key_vars[2],
                         season=f'{key_vars[0]}_{key_vars[1]}') \
-                .pipe(self.convert_event, key=i)
+                .pipe(self.convert_event, outcome_key=i)
                         
             if dfs is None:
                 dfs = df
@@ -359,18 +378,173 @@ class TFRRSScraper():
         return dfs.reset_index(drop=True)
     
 
-    def download_and_export_data(self) -> None:
+    def combine_predictor_event_dicts(self) -> PredictorResultsDict:
+        '''Combines dictionaries of TFRRS tables for all predictor events.
+        
+        Returns:
+          -  data_dict (`Dict`): A dictionary of dictionaries for all predictor events. The first key is the 'season_year_sex_event' identifier for the data. The value of this key is another dictionary whose keys are the column names of the downloaded TFRRS table. The values of the column name keys are a final set of dictionaries, whose keys are the row indices of the downloaded table and whose values are the corresponding data values from the TFRRS table.'''
 
-        if not self.merge:
-            if self.predictor_events is None:
-                self.download_outcome_event(export=True)
-                
-            self.download_outcome_event()
-            # self.download_predictor_events()
+        url_dict = self.produce_predictor_urls_by_season_dict()
+        data_dict = {}
+
+        for i in url_dict:
+            if url_dict[i] is None:
+                continue
+
+            pred_dict = self.download_single_predictor_table(url=url_dict[i], key=i)
+
+            data_dict = data_dict | pred_dict
+
+        return data_dict
+    
+
+    def concatenate_predictor_event(self, data_dict: PredictorResultsDict, event: str) -> pd.DataFrame:
+        '''Docstring'''
+
+        data_dict = data_dict
+        key_list = list(data_dict.keys())
+
+        event_keys = [key for key in key_list if key.endswith(event)]
+        dfs = None
+        for key in event_keys:
+
+            df = pd.DataFrame.from_dict(data_dict[key])
+            if dfs is None:
+                dfs = df
+                continue
+
+            dfs = pd.concat([dfs, df])
+
+        
+        return dfs
+
+
+    def download_predictor_events(self, export: bool = False) -> Tuple[pd.DataFrame, ...] | None:
+        '''Docstring'''
+
+        data_dict = self.combine_predictor_event_dicts()
+        dfs = None
+        merge_cols = [
+            'athlete_team',
+            'season',
+            'sex'
+        ]
+
+        for predictor in self.predictor_events:
+            df = self.concatenate_predictor_event(data_dict=data_dict, event=predictor)
+            
+            if len(self.predictor_events) == 1:
+                return df
+
+            if dfs is None:
+                dfs = df
+                continue
+
+            dfs = dfs.merge(right=df,
+                            how='outer',
+                            left_on=merge_cols,
+                            right_on=merge_cols)
+            
+        if export:
+            season_range = self.sort_seasons(df=dfs)
+            pred_events = '_'.join(self.predictor_events)
+            export_path = f'data2/tfrrs_{self.division}_{pred_events}_{season_range}_{datetime.now():%Y-%m-%d}.csv'
+            dfs.to_csv(export_path, index=False)
+            return
+        
+        return dfs.reset_index(drop=True)
+
+        
+    def download_and_export_data(self, download_only: bool = False) -> None:
+
+        if download_only:
+            if self.merge:
+                return pd.merge(
+                    left=self.download_outcome_event(), 
+                    right=self.download_predictor_events(),
+                    how='outer',
+                    left_on=merge_cols,
+                    right_on=merge_cols
+                ).reset_index(drop=True)
+
+            return self.download_outcome_event(), self.download_predictor_events()
+
+        if self.merge:
+            merge_cols = ['athlete_team', 'season', 'sex']
+
+            outcomes = self.download_outcome_event()
+            predictors = self.download_predictor_events()
+
+            df = pd.merge(left=outcomes, right=predictors,
+                          how='outer',
+                          left_on=merge_cols,
+                          right_on=merge_cols) \
+                    .reset_index(drop=True)
+            
+            season_range = self.sort_seasons(df=df)
+            events = '_'.join([self.outcome_event] + self.predictor_events)
+            export_path =  f'data2/tfrrs_{self.division}_{events}_{season_range}_{datetime.now():%Y-%m-%d}.csv'
+            df.to_csv(export_path, index=False)
+            return
+
+        if self.predictor_events is None:
+            self.download_outcome_event(export=True)
+            return
+            
+        self.download_outcome_event(export=True)
+        self.download_predictor_events(export=True)
+        return
+
+
+    def sort_seasons(self, df: pd.DataFrame) -> str:
+        '''Docstring'''
+        season_list = list(df['season'].unique())
+        season_list.sort(key=lambda x: (x.split('_')[1], x.split('_')[0]))
+
+        return f'{season_list[0]}-{season_list[-1]}'
+
+
+    def convert_event(self, 
+                      df: pd.DataFrame, 
+                      outcome_key: str | None = None, 
+                      predictor_col: str | None = None) -> pd.DataFrame:
+        '''Take a pd.DataFrame of a TFRRS table and convert the time column into seconds. Takes either `outcome_key` or `predictor_col`, but not both.
+        
+        Parameters:
+          -  df (`pd.DataFrame`): the output of pd.read_html() directly from a TFRRS table URL
+          -  key (`str`): the key of the url dictionary that produced the URL to the TFRRS table for the outcome event
+          -  col (`str`): the time column produced from the URL to the TFRRS table of a predictor event
+          
+        Returns:
+          -  df (`pd.DataFrame`): the same dataframe, but with the time column converted to seconds from `%m:%s.%f`
+        '''
+        
+        if predictor_col is None and outcome_key is None:
+            raise ValueError('Either `outcome_key` or `predictor_col` must be specified')
+        
+        if predictor_col is not None and outcome_key is not None:
+            raise ValueError('Only one of `outcome_key` or `predictor_col` can be specified')
+
+        if predictor_col is None:
+            event = outcome_key.split('_')[3]
+        elif outcome_key is None:
+            event = predictor_col.split('_')[1]  
+
+        match event:
+            case '100' | '110H' | '200':
+                df[f'time_{event}'] = df[f'time_{event}'].astype('float')
+
+            case '400' | '400H':
+                df[f'time_{event}'] = df[f'time_{event}'].apply(self.clean_400m_times)
+
+            case _:
+                df[f'time_{event}'] = df[f'time_{event}'].apply(self.clean_distance_times) 
+
+        return df
 
 
     def clean_400m_times(self, row: str | float) -> float:
-        '''Take each row of a pd.Series and modify it according to its format
+        '''Take each row of a pd.Series of 400/400H data and modify it according to its format
         
         Parameters:
           -  row (str | float): the value of the row in the pd.Series
@@ -383,130 +557,40 @@ class TFRRSScraper():
             return 60 * float(time_split[0]) + float(time_split[1])
         
     
-    def clean_distance_times(self, row: str | float) -> float:
-        '''Take each row of a pd.Series and modify it according to its format
+    def clean_distance_times(self, row: str) -> float:
+        '''Take each row of a pd.Series and modify it according to its format. Target events are the 800m and longer.
         
         Parameters:
-          -  row (str | float): the value of the row in the pd.Series
+          -  row (`str`): the value of the row in the pd.Series
         '''
 
         time_split = str(row).split(':')
         return 60 * float(time_split[0]) + float(time_split[1])
 
 
-    # def download_and_merge_sex_data(self, url: str) -> pd.DataFrame:
-    #     '''Merges TFRRS data tables from the different sex categories together
+@deprecated('''Not functional right now, will figure something out eventually. Since I added the merge argument in the initializer, you don't really need this as much.''')
+def read_tfrrs_data(self, event: str | List[str]) -> pd.DataFrame:
+    '''Grabs all the TFRRS .csv files in the data directory and concatenates them together
+
+    Parameters:
+        -  event (`str`): the track event of interest
+    
+    Returns:
+        -  dfs (pd.DataFrame): a single pd.DataFrame of all the TFRRS data in the data directory
+    '''
+    # event_string = event if isinstance(event, str) else '_'.join(event)
+    data_list = glob(f'data2/tfrrs*{event}*.csv')
+
+    dfs = None
+    for csv in data_list:
+        # for event in event_list:
+        df = pd.read_csv(csv)
+        df = df[['athlete_team', 'sex', 'season', f'time_{event}', f'{event}_tag']]
         
-    #     Parameters:
-    #       -  url (str): URL to a TFRRS table
-            
-    #     Returns:
-    #       -  df_all (pd.DataFrame): a pd.DataFrame that merges the 400m or 1500m/800 data for both sexes into one table.
-    #     '''
-        
-    #     # df_women = self.download_and_clean_single_event(url=, sex='f').assign(sex='f')
-    #     # df_men = self.download_and_clean_single_event(url=, sex='m').assign(sex='m')
+        if dfs is None:
+            dfs = df
+            continue
 
-    #     df_all = pd.concat([df_women, df_men])
+        dfs = pd.concat([dfs, df])
 
-    #     return df_all
-
-
-    # def download_urls(self, url_root: str, season: str, event: str) -> pd.DataFrame:
-    #     '''Merges TFRRS track event tables from the different sex categories together. If the event is the mile, convert the time to a 1500 time.
-        
-    #     Parameters:
-    #       -  url_root_800 (str): URL to a TFRRS 800m table
-    #       -  season (str): 'indoor' or 'outdoor'. Depending on the season, the values for the events change. In indoor: 53 = 400m, 54 = 800m, 57 = mile. In outdoor: 11 = 400m, 12 = 800m, 13 = 1500m.
-    #       -  event (str): the event of interest
-            
-            
-    #     Returns:
-    #       -  df (pd.DataFrame): a pd.DataFrame that merges the (400m or 1500m) and 800m data for both sexes into one table
-    #     '''
-        
-    #     event_key = f'{season}_{event}'
-
-        
-
-
-    #     match season:
-    #         case 'indoor':
-    #             df = self.download_and_merge_sex_data()
-
-
-    #     if self.predictor_events == '400':
-    #       if season == 'indoor':
-    #           df = self.download_and_merge_sex_data(url_root_800 = url_root,
-    #                               url_root_other = url_root.replace('event_type=54', 'event_type=53'))
-    #       elif season == 'outdoor':
-    #           df = self.download_and_merge_sex_data(url_root_800 = url_root,
-    #                               url_root_other = url_root.replace('event_type=12', 'event_type=11'))
-    #     elif self.predictor_events == '1500':
-    #       if season == 'indoor':
-    #           df = self.download_and_merge_sex_data(url_root_800 = url_root,
-    #                               url_root_other = url_root.replace('event_type=54', 'event_type=57'))
-    #           # Convert mile to 1500
-    #           df['time_1500'] = (df['time_1500'] * 0.9321).round(decimals=2)
-
-    #       elif season == 'outdoor':
-    #           df = self.download_and_merge_sex_data(url_root_800 = url_root,
-    #                               url_root_other = url_root.replace('event_type=12', 'event_type=13'))
-
-    #     return df
-
-
-    # def download_seasons(self, seasons: dict, division: str) -> pd.DataFrame:
-    #     '''Takes a dictionary of seasons and urls for a division and combines them all into a single pd.DataFrame
-        
-    #     Parameters:
-    #       -  seasons (dict): Keys follow the pattern [season]_[year], and the values are the URL to the Top 500 800m runners table for that season-year-division combination on TFFRS.
-    #       -  division (str): with NCAA Division is being downloaded
-            
-    #     Returns:
-    #       -  dfs (pd.DataFrame): a pd.DataFrame of multiple seasons of women and men's 400m and 800m times.
-    #     '''
-        
-    #     dfs = None
-
-    #     for season in seasons:
-    #         df = self.download_urls(url_root=seasons[season],
-    #                                 season=season.split('_')[0])
-            
-    #         df['season'] = season
-            
-    #         if dfs is None:
-    #             dfs = df
-    #             continue
-
-    #         dfs = pd.concat([dfs, df])
-
-    #     # Export
-    #     dfs.to_csv(f'data/tfrrs_{division}_{list(seasons.keys())[0]}-{list(seasons.keys())[-1]}_{self.predictor_events}_{datetime.now():%Y-%m-%d}.csv', index=False)
-
-    #     return dfs
-
-
-    # def merge_tfrrs_data(self, event: str) -> pd.DataFrame:
-    #     '''Grabs all the TFRRS .csv files in the data directory and concatenates them together
-
-    #     Parameters:
-    #       -  event (`str`): the track event of interest
-        
-    #     Returns:
-    #       -  dfs (pd.DataFrame): a single pd.DataFrame of all the TFRRS data in the data directory
-    #     '''
-    #     data_list = glob(f'data/tfrrs*{event}*.csv')
-
-    #     dfs = None
-
-    #     for csv in data_list:
-    #         df = pd.read_csv(csv)
-
-    #         if dfs is None:
-    #             dfs = df
-    #             continue
-
-    #         dfs = pd.concat([dfs, df])
-
-    #     return dfs.drop_duplicates().reset_index(drop=True)
+    return dfs.drop_duplicates().reset_index(drop=True)
