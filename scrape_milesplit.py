@@ -309,7 +309,7 @@ class MileSplitScraper():
         df.columns = df.columns.str.lower()
 
         # Combine id columns
-        df['athlete_team'] = df['athlete/team'] + ' ' + df['grade'].astype('str')
+        df['athlete_team'] = df['athlete/team'] + ' | ' + df['grade'].astype('str')
         df['athlete_team'] = df['athlete_team'].str.replace('.0', '')
 
         # Process time columns and convert 1600m and Mile to 1500m times and 3200m and 2Mile to 3000m times
