@@ -668,7 +668,7 @@ class TFRRSScraper():
             
     E.g. If you ran the TFRRSScraper with outcome = '800', and predictors = ['400', '1500'], the
     CSV would be saved with the name: 'tfrrs_*_800_400_1500_*.csv'. To read that file, the list 
-    provided must follow the same order: ['800', '400', '1500']. If ['800', '1500', '400'] is \
+    provided must follow the same order: ['800', '400', '1500']. If ['800', '1500', '400'] is 
     entered, the files won't be read.
 ''')
 def read_tfrrs_data(events: str | List[str], drop_na: bool = False) -> pd.DataFrame:
