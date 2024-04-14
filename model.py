@@ -180,6 +180,8 @@ class BivariateModel():
                             robust=True,
                             line_kws={'color': 'red'},
                             scatter_kws={'alpha': 0.3})
+            case _:
+                raise NotImplementedError('Confidence Intervals for this model type are not available.')
                             
     
     def fit_quantile(self, q: float, model: statsmodels.regression.quantile_regression.QuantReg) -> List[List[float]]:
@@ -198,6 +200,9 @@ class BivariateModel():
 
     def plot_quantiles_by_parameter(self, quantile_data: pd.DataFrame | None = None, ols_data: dict | None = None) -> None:
         '''Docstring'''
+
+        if self.model_type != 'quantreg':
+            raise ValueError('Plotting parameter quantiles is only available for Quantile Regression (`quantreg`) models.')
 
         sns.set_theme(style='whitegrid')
 
@@ -283,10 +288,15 @@ class MultivariateModel():
 
 
     def __call__(self):
-        self.plot_dist()
-        self.plot_partial_regressors()
-        self.check_assumptions(vif=False)
-        return self.model_summary
+        match self.model_type:
+            case 'quantreg':
+                self.plot_quantiles_by_parameter()
+                return self.model_summary
+            case _:
+                if self.model_type not in ['quad']: 
+                    self.plot_partial_regressors()
+                self.check_assumptions(vif=False)
+                return self.model_summary
         
 
     @property
@@ -356,10 +366,14 @@ class MultivariateModel():
     def model_summary(self) -> statsmodels.iolib.summary.Summary:
         '''Returns a summary of a `statsmodels.formula.api` model based on the specified `model_type` in the initializer'''
 
-        if self.model_type == 'quantreg':
-            return self.model[0]
-        else:
-            return self.model.summary()
+        match self.model_type:
+            case 'quantreg':
+                return self.model[0]
+            case 'quad':
+                # TODO: Add annotations for parameters (const, x1, x2, ...x_i)
+                return self.model.summary()
+            case _:
+                return self.model.summary()
     
 
     def check_assumptions(self, **kwargs) -> None:
@@ -378,7 +392,7 @@ class MultivariateModel():
         
         sns.set_theme(style='whitegrid')
 
-        fig = plt.figure(figsize=(10,10))
+        fig = plt.figure(figsize=(8,8))
         sm.graphics.plot_partregress_grid(self.model, grid=(2,2), fig=fig)
 
     
@@ -445,7 +459,8 @@ class MultivariateModel():
 
     def plot_quantiles_by_parameter(self, 
                                     quantile_data: pd.DataFrame | None = None, 
-                                    ols_data: dict | None = None) -> None:
+                                    ols_data: dict | None = None,
+                                    title_specifier: str | None = None) -> None:
         # TODO: #6 add docstring
         # https://www.statsmodels.org/dev/examples/notebooks/generated/quantile_regression.html#Second-plot
         # https://www.statsmodels.org/dev/generated/statsmodels.formula.api.quantreg.html#
@@ -459,9 +474,14 @@ class MultivariateModel():
         if ols_data is None:
             ols_data = self.model[1]
 
+        if title_specifier is None:
+            title_specifier = ''
+        else:
+            title_specifier = title_specifier + ' | '
+
         n = quantile_data.shape[0]
         plt.figure(figsize=(12,5))  # TODO: #7 Make figsize, rest of plotting generalizable
-        plt.suptitle('Conditional Parameter Estimates across Quantiles')
+        plt.suptitle(f'Conditional Parameter Estimates across Quantiles\n{title_specifier}n = {len(self.data):,}')
 
         plt.subplot(1, 2, 1)
         p1 = plt.plot(quantile_data['q'], quantile_data[f'time_{self.predictor_events[0]}'], color='black', label=f'Quantile Reg {self.predictor_events[0]}m')
