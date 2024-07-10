@@ -228,12 +228,12 @@ class BivariateModel():
     
 
     def predict_time(self,  
-                     time: str, 
+                     time: float | str, 
                      event: int | str | None = None) -> float:
         '''Use the model's parameters to predict the average 800m time for a runner who runs a certain event in a certain time. No protection against extrapolation
         
         Parameters:
-          -  event (`int` | `str`): possible events to predict 800m time from. Options: '400', '1600', 'mile'
+          -  event (`int` | `str`): events to predict the outcome event's time from.
           -  time (`str`): time elapsed in the specified event. Format: 'm:ss.xx' 
         
         Returns:
@@ -244,24 +244,30 @@ class BivariateModel():
             event = self.predictor_event
 
         # Grab coefficients
-        beta_0 = self.model.params['Intercept']
+        try:
+            beta_0 = self.model.params['Intercept']
+        except KeyError:
+            beta_0 = self.model.params['const']
 
         match str(event).lower():
-            case '400':
-                beta_1_index = 'time_400'
             case '1500' | '1600' | 'mile':
                 beta_1_index = 'time_1500'
+            case _:
+                beta_1_index = f'time_{event}'
 
         beta_1 = self.model.params[beta_1_index]
 
         # Convert time to seconds
-        time_sec = float(time.split(':')[0]) * 60 + float(time.split(':')[1])
-
+        if isinstance(time, str):
+            time_sec = float(time.split(':')[0]) * 60 + float(time.split(':')[1])
+        else: 
+            time_sec = time
+        
         # Add 1600m and Mile conversions to 1500m
         if str(event) == '1600':
             time_sec = time_sec * 0.9375
         elif str(event) == 'mile':
-            time_sec = time_sec * 0.93205678835
+            time_sec = time_sec * 0.9321
 
         return round(beta_0 + beta_1 * time_sec, 2)
     
