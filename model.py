@@ -1,4 +1,3 @@
-
 import pandas as pd
 import statsmodels
 import statsmodels.formula.api as smf
@@ -6,6 +5,7 @@ import statsmodels.api as sm
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
+
 from scipy import stats
 from typing import List, Dict
 from linear_diagnostics import LinearRegDiagnostic
