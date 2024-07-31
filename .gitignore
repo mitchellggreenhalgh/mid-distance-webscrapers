@@ -4,3 +4,4 @@
 test_world.ipynb
 *.html
 *.ipynb
+*.code-workspace

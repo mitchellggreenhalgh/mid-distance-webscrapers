@@ -1,13 +1,37 @@
 '''A module to create a TFRRSScraper class to scrape track event data from TFRRS.org'''
 
-import re
 from datetime import datetime
 from glob import glob
 from typing import Dict, List, Tuple, Any, Type
 from os import makedirs
 from deprecated import deprecated
 
+import re
 import pandas as pd
+
+
+def create_dx_dict(dict: dict, division: str) -> dict:
+    '''Updates the values of the DI dictionary to correspond with DII and DIII URLs. There are still some inconsistencies, so some values will have to be manually fixed after the function.
+    
+    Parameters:
+        dict (dict): the NCAA DI Dictionary of URLs
+        division (str): 'II' or 'III' to match DII or DIII
+        
+    Returns:
+        dx_dict (dict): a dict with updated values to match the corresponding NCAA division'''
+    
+    dx_dict = {}
+    for season in dict:
+        new_url = dict[season].replace('_I_', f'_{division}_')
+
+        table_id = dict[season].split('?')[0][-4:]
+        new_table_id = str(int(table_id) + len(division))
+        new_url = new_url.replace(table_id, new_table_id)
+        
+        dx_dict[season] = new_url
+
+    return dx_dict
+
 
 __valid_events__ = [
   '100', 
@@ -24,6 +48,39 @@ __valid_events__ = [
 ]
 
 PredictorResultsDict = Type[Dict[str, Dict[str, Dict[int, Any]]]]
+
+di_dict = {
+    'indoor_2022': 'https://tf.tfrrs.org/list_data/3492?other_lists=https%3A%2F%2Ftf.tfrrs.org%2Flists%2F3492%2F2021_2022_NCAA_Div_I_Indoor_Qualifying_FINAL&limit=2000&event_type=54&year=&gender=m',
+    'outdoor_2022': 'https://tf.tfrrs.org/list_data/3711?other_lists=https%3A%2F%2Fxc.tfrrs.org%2Flists%2F3711%2F2022_NCAA_Division_I_Outdoor_Qualifying_FINAL&limit=2000&event_type=12&year=&gender=m',
+    'indoor_2023': 'https://tf.tfrrs.org/list_data/3901?other_lists=https%3A%2F%2Fm.tfrrs.org%2Flists%2F3901%2F2022_2023_NCAA_Div_I_Indoor_Qualifying_FINAL&limit=2000&event_type=54&year=&gender=m',
+    'outdoor_2023': 'https://tf.tfrrs.org/list_data/4044?other_lists=https%3A%2F%2Ftf.tfrrs.org%2Flists%2F4044%2F2023_NCAA_Division_I_All_Schools_Rankings&limit=2000&event_type=12&year=&gender=m',
+    'indoor_2024': 'https://tf.tfrrs.org/list_data/4364?other_lists=https%3A%2F%2Fmobile.tfrrs.org%2Flists%2F4364%2F2023_2024_NCAA_Div_I_Indoor_Qualifying_FINAL&limit=2000&event_type=54&year=&gender=m',
+    'outdoor_2024': 'https://www.tfrrs.org/list_data/4515?other_lists=https%3A%2F%2Ftfrrs.org%2Flists%2F4515%2F2024_NCAA_Division_I_Rankings_FINAL&limit=2000&event_type=12&year=&gender=m'
+}
+
+dii_dict = create_dx_dict(di_dict, 'II')     
+dii_dict['outdoor_2022'] = 'https://tf.tfrrs.org/list_data/3595?other_lists=https%3A%2F%2Fupload.tfrrs.org%2Flists%2F3595%2F2022_NCAA_Division_II_Outdoor_Qualifying_FINAL&limit=2000&event_type=12&year=&gender=m'
+
+diii_dict = create_dx_dict(di_dict, 'III')
+diii_dict['indoor_2024'] = 'https://tf.tfrrs.org/list_data/4366?other_lists=https%3A%2F%2Fupload.tfrrs.org%2Flists%2F4366%2F2023_2024_NCAA_Div_III_Indoor_Qualifying_FINAL&limit=2000&event_type=54&year=&gender=m'
+
+naia_dict = {
+    'indoor_2022': 'https://tf.tfrrs.org/list_data/3495?other_lists=https%3A%2F%2Fwww.tfrrs.org%2Flists%2F3495%2F2021_2022_NAIA_Indoor_Qualifying_FINAL&limit=2000&event_type=54&year=&gender=m',
+    'outdoor_2022': 'https://tf.tfrrs.org/list_data/3596?other_lists=https%3A%2F%2Fwww.tfrrs.org%2Flists%2F3596%2F2022_NAIA_Outdoor_Qualifying_List_FINAL&limit=2000&event_type=12&year=&gender=m',
+    'indoor_2023': 'https://tf.tfrrs.org/list_data/3904?other_lists=https%3A%2F%2Fwww.tfrrs.org%2Flists%2F3904%2F2022_2023_NAIA_Indoor_Qualifying_List_FINAL&limit=2000&event_type=54&year=&gender=m',
+    'outdoor_2023': 'https://tf.tfrrs.org/list_data/4046?other_lists=https%3A%2F%2Fmobile.tfrrs.org%2Flists%2F4046%2F2023_NAIA_Outdoor_Qualifying_FINAL&limit=2000&event_type=12&year=&gender=m',
+    'indoor_2024': 'https://tf.tfrrs.org/list_data/4368?other_lists=https%3A%2F%2Fm.tfrrs.org%2Flists%2F4368%2F2023_2024_NAIA_Indoor_Qualifying_List_FINAL&limit=2000&event_type=54&year=&gender=m',
+    'outdoor_2024': 'https://www.tfrrs.org/list_data/4518?other_lists=https%3A%2F%2Ftf.tfrrs.org%2Flists%2F4518%2F2024_NAIA_Outdoor_Qualifying_List_FINAL&limit=2000&event_type=12&year=&gender=m'
+}
+
+njcaa_dict = {
+    'indoor_2022': 'https://tf.tfrrs.org/list_data/3496?other_lists=https%3A%2F%2Ftf.tfrrs.org%2Flists%2F3496%2F2021_2022_NJCAA_Indoor_Qualifying_List&limit=2000&event_type=54&year=&gender=m',
+    'outdoor_2022': 'https://tf.tfrrs.org/list_data/3717?other_lists=https%3A%2F%2Ftf.tfrrs.org%2Flists%2F3717%2FNJCAA_All_Schools_Outdoor_Performance_List&limit=2000&event_type=12&year=&gender=m',
+    'indoor_2023': 'https://tf.tfrrs.org/list_data/3905?other_lists=https%3A%2F%2Fmobile.tfrrs.org%2Flists%2F3905%2F2022_2023_NJCAA_Indoor_Qualifying_List&limit=2000&event_type=54&year=&gender=m',
+    'outdoor_2023': 'https://tf.tfrrs.org/list_data/4201?other_lists=https%3A%2F%2Ftf.tfrrs.org%2Flists%2F4201%2FNJCAA_All_Schools_Outdoor_Performance_List&limit=2000&event_type=12&year=&gender=m',
+    'indoor_2024': 'https://tf.tfrrs.org/list_data/4367?other_lists=https%3A%2F%2Fm.tfrrs.org%2Flists%2F4367%2F2023_2024_NJCAA_Indoor_Qualifying_List&limit=2000&event_type=54&year=&gender=m',
+    'outdoor_2024': 'https://www.tfrrs.org/list_data/4519?other_lists=https%3A%2F%2Fmobile.tfrrs.org%2Flists%2F4519%2F2024_NJCAA_DI_Outdoor_Qualifying_List&limit=2000&event_type=12&year=&gender=m'
+}
 
 
 class TFRRSScraper():
@@ -119,7 +176,7 @@ class TFRRSScraper():
 
     def __call__(self) -> None:
         self.download_and_export_data()
-
+    
 
     def produce_outcome_url_by_season_key(self,
                                       season_idx: str, 
@@ -533,6 +590,8 @@ class TFRRSScraper():
         Returns:
           - outcome_data, predictors_data (`Tuple`): The outcome event DataFrame and the predictor event(s) DataFrame. By default, they are exported to the data directory as CSVs. If `merge=True` in the specifier, they are exported or returned as a single DataFrame.'''
 
+        merge_cols = ['athlete_team', 'season', 'sex']
+
         if download_only:
             if self.merge:
                 return pd.merge(
@@ -546,8 +605,6 @@ class TFRRSScraper():
             return self.download_outcome_event(), self.download_predictor_events()
 
         if self.merge:
-            merge_cols = ['athlete_team', 'season', 'sex']
-
             outcomes = self.download_outcome_event()
             predictors = self.download_predictor_events()
 
