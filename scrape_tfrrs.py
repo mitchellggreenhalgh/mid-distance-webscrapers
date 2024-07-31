@@ -82,6 +82,7 @@ njcaa_dict = {
     'outdoor_2024': 'https://www.tfrrs.org/list_data/4519?other_lists=https%3A%2F%2Fmobile.tfrrs.org%2Flists%2F4519%2F2024_NJCAA_DI_Outdoor_Qualifying_List&limit=2000&event_type=12&year=&gender=m'
 }
 
+# TODO: add all-college dictionary (e.g. https://tfrrs.org/lists/4541/2024_All_College_Outdoor_Track_Leaderboard?standard_event_hnd=13&gender=f)
 
 class TFRRSScraper():
     def __init__(self, 
